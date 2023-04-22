@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>3d flame</title>
+    <style>
+        .slider{
+            display: inline-block;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas" width="1000" height="500px" style="border:1px red solid;"></canvas>
+    <div style="position:absolute;margin-left:20%;" id="uiContainer">
+        <div id="ui">
+            <div class="slider" id="fieldOfView"></div>
+            <div>
+                <div class="slider" id="x"></div>
+                <div class="slider" id="y"></div>
+                <div class="slider" id="z"></div>
+            </div>
+            <div>
+                <div class="slider" id="angleX"></div>
+                <div class="slider" id="angleY"></div>
+                <div class="slider" id="angleZ"></div>
+            </div>
+            <div>
+                <div class="slider" id="scaleX"></div>
+                <div class="slider" id="scaleY"></div>
+                <div class="slider" id="scaleZ"></div>
+            </div>
+        </div>
+    </div>
+    <p id="timeTest" style="white-space:pre-wrap;"></p>
+    <script type="text/javascript" src="jquery-3.6.4.min.js"></script>
+    <script type="text/javascript" src="webgl-lessons-ui.js"></script>
+    <script type="text/javascript" src="webgl-utils.js"></script>
+    <!-- <script type="text/javascript" src="renderer.js"></script> -->
+    <script type="text/javascript" src="dist/main.js"></script>
+</body>
+
+</html>
