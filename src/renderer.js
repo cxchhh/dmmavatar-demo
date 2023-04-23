@@ -3,6 +3,7 @@ import ndarray from "ndarray";
 import cwise from "cwise";
 import zeros from "zeros";
 import { GPU } from "gpu.js";
+import show from "ndarray-show";
 
 class Renderer {
     constructor(vertices, faces, lbs_weights, posedirs, shapedirs) {
@@ -14,25 +15,30 @@ class Renderer {
         this.V = vertices.shape[0];
         this.J = lbs_weights.shape[1];
         this.gpu = new GPU();
+        this.canvas = document.querySelector("#canvas");
+        this.gl = this.canvas.getContext("webgl2");
         this.vertexShaderSource = `#version 300 es
-            // an attribute is an input (in) to a vertex shader.
-            // It will receive data from a buffer
-            in vec4 a_position;
-            in vec4 a_color;
-
-            // A matrix to transform the positions by
-            uniform mat4 u_matrix;
-            // a varying the color to the fragment shader
-            out vec4 v_color;
-
-            // all shaders have a main function
-            void main() {
-                // Multiply the position by the matrix.
-                gl_Position = u_matrix * a_position;
-
-                // Pass the color to the fragment shader.
-                v_color = a_color;
-            }`;
+        // an attribute is an input (in) to a vertex shader.
+        // It will receive data from a buffer
+        in vec4 a_position;
+        uniform vec4 a_color;
+        // A matrix to transform the positions by
+        uniform mat4 u_matrix;
+        // a varying the color to the fragment shader
+        out vec4 v_color;
+        float random (vec2 st) {
+            return fract(sin(dot(st.xy,vec2(12.9898,78.233)))*43758.5453123);
+        }
+        // all shaders have a main function
+        void main() {
+            
+            // Multiply the position by the matrix.
+            vec4 apos=vec4(a_position.xyz*200.0f,1);
+            gl_Position = u_matrix * (apos);
+        
+            // Pass the color to the fragment shader.
+            v_color = vec4(random(a_position.xy),random(a_position.yz),random(a_position.zx),1);
+        }`;
         this.fragmentShaderSource = `#version 300 es
             precision highp float;
 
@@ -48,59 +54,58 @@ class Renderer {
     }
 
     init(betas, transform, pose_feature) {
-        
-        
+        //var st=Date.now();
         const shapeMatMul = this.gpu.createKernel(function (a, b, v) {
             let sum = 0;
             for (let i = 0; i < 50; i++) {
                 sum += a[this.thread.x * 50 + i] * b[i];
             }
-            return sum+v[this.thread.x];
+            return sum + v[this.thread.x];
         }).setOutput([this.V * 3]);
-        this.shapemm = shapeMatMul(this.shapedirs.data, betas.data,this.vertices.data);
-        const poseMatMul =  this.gpu.createKernel(function (a, b, v) {
+        this.shapemm = shapeMatMul(this.shapedirs.data, betas.data, this.vertices.data);
+        //alert((Date.now()-st)+'ms');
+        const poseMatMul = this.gpu.createKernel(function (a, b, v) {
             let sum = 0;
-            let mo=this.thread.x%3;
+            let mo = this.thread.x % 3;
             for (let i = 0; i < 36; i++) {
-                sum += a[i] * b[(((this.thread.x-mo)/3)*36+i)*3+mo];
+                sum += a[i] * b[(((this.thread.x - mo) / 3) * 36 + i) * 3 + mo];
             }
-            return sum+v[this.thread.x];
+            return sum + v[this.thread.x];
         }).setOutput([this.V * 3]);
-        
-        this.vertsmm = poseMatMul(pose_feature.data,this.posedirs.data,this.shapemm);
-        
-        const lbswMatMul =  this.gpu.createKernel(function (a, b, J) {
+
+        this.vertsmm = poseMatMul(pose_feature.data, this.posedirs.data, this.shapemm);
+
+        const lbswMatMul = this.gpu.createKernel(function (a, b, J) {
             let sum = 0;
-            let mo=this.thread.x%16;
+            let mo = this.thread.x % 16;
             for (let i = 0; i < J; i++) {
-                sum += a[i] * b[(((this.thread.x-mo)/16)*J+i)*16+mo];
+                sum += a[i] * b[(((this.thread.x - mo) / 16) * J + i) * 16 + mo];
             }
             return sum;
         }).setOutput([this.V * 16]);
-        this.lbswmm = lbswMatMul(this.lbs_weights.data,transform.data,this.J);
+        this.lbswmm = lbswMatMul(this.lbs_weights.data, transform.data, this.J);
         //var st=Date.now();
-        const homoMatMul =  this.gpu.createKernel(function (a, b) {
+        const homoMatMul = this.gpu.createKernel(function (a, b) {
             let sum = 0;
-            let mo=this.thread.x%4;
+            let mo = this.thread.x % 4;
             for (let i = 0; i < 3; i++) {
-                sum += a[this.thread.x*4+i] * b[((this.thread.x-mo)/4)*3+i];
+                sum += a[this.thread.x * 4 + i] * b[((this.thread.x - mo) / 4) * 3 + i];
             }
-            sum+=a[this.thread.x*4+3];
+            sum += a[this.thread.x * 4 + 3];
             return sum;
         }).setOutput([this.V * 4]);
-        this.v_homo = homoMatMul(this.lbswmm,this.vertsmm);
+        this.v_homo = homoMatMul(this.lbswmm, this.vertsmm);
         //alert((Date.now()-st)+'ms');
     }
 
     render(betas, transform, pose_feature) {
-        
+
         this.init(betas, transform, pose_feature);
-        
+
         //console.log(this.v_homo);
         // Get A WebGL context
         /** @type {HTMLCanvasElement} */
-        var canvas = document.querySelector("#canvas");
-        var gl = canvas.getContext("webgl2");
+        var gl = this.gl;
         if (!gl) {
             return;
         }
@@ -111,8 +116,8 @@ class Renderer {
 
         // look up where the vertex data needs to go.
         var positionAttributeLocation = gl.getAttribLocation(program, "a_position");
-        var colorAttributeLocation = gl.getAttribLocation(program, "a_color");
-
+        //var colorAttributeLocation = gl.getAttribLocation(program, "a_color");
+        var colorLocation=gl.getUniformLocation(program,"a_color");
         // look up uniform locations
         var matrixLocation = gl.getUniformLocation(program, "u_matrix");
 
@@ -131,10 +136,14 @@ class Renderer {
         // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
         gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
         // Set Geometry.
-        this.setGeometry(gl);
+        //console.log(this.vertices.data);
+        gl.bufferData(
+            gl.ARRAY_BUFFER,
+            this.v_homo,
+            gl.STATIC_DRAW);
 
         // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-        var size = 3;          // 3 components per iteration
+        var size = 4;          // 3 components per iteration
         var type = gl.FLOAT;   // the data is 32bit floats
         var normalize = false; // don't normalize the data
         var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
@@ -142,24 +151,33 @@ class Renderer {
         gl.vertexAttribPointer(
             positionAttributeLocation, size, type, normalize, stride, offset);
 
-        // create the color buffer, make it the current ARRAY_BUFFER
-        // and copy in the color values
-        var colorBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-        this.setColors(gl);
+        // // create the color buffer, make it the current ARRAY_BUFFER
+        // // and copy in the color values
+        // var colorBuffer = gl.createBuffer();
+        // gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+        // this.setColors(gl);
 
-        // Turn on the attribute
-        gl.enableVertexAttribArray(colorAttributeLocation);
+        // // Turn on the attribute
+        // gl.enableVertexAttribArray(colorAttributeLocation);
 
-        // Tell the attribute how to get data out of colorBuffer (ARRAY_BUFFER)
-        var size = 3;          // 3 components per iteration
-        var type = gl.UNSIGNED_BYTE;   // the data is 8bit unsigned bytes
-        var normalize = true;  // convert from 0-255 to 0.0-1.0
-        var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next color
-        var offset = 0;        // start at the beginning of the buffer
-        gl.vertexAttribPointer(
-            colorAttributeLocation, size, type, normalize, stride, offset);
+        // // Tell the attribute how to get data out of colorBuffer (ARRAY_BUFFER)
+        // var size = 3;          // 3 components per iteration
+        // var type = gl.UNSIGNED_BYTE;   // the data is 8bit unsigned bytes
+        // var normalize = true;  // convert from 0-255 to 0.0-1.0
+        // var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next color
+        // var offset = 0;        // start at the beginning of the buffer
+        // gl.vertexAttribPointer(
+        //     colorAttributeLocation, size, type, normalize, stride, offset);
+        
+        var indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer);
+        //console.log(this.faces.data);
 
+        gl.bufferData(
+            gl.ELEMENT_ARRAY_BUFFER,
+            this.faces.data,
+            gl.STATIC_DRAW
+        )
 
         function radToDeg(r) {
             return r * 180 / Math.PI;
@@ -171,11 +189,20 @@ class Renderer {
 
         // First let's make some variables
         // to hold the translation,
-        var translation = [-150, 0, -360];
-        var rotation = [degToRad(190), degToRad(40), degToRad(30)];
+        var translation = [0, 0, -360];
+        var rotation = [0, 0, 0];
         var scale = [1, 1, 1];
         var fieldOfViewRadians = degToRad(60);
+        var F=this.faces.shape[0]*3;
+        var F_num=F;
 
+        // console.log(show(this.vertices.pick(3,null)));
+        // console.log(show(this.vertices.pick(22066,null)));
+        // console.log(show(this.vertices.pick(22065,null)));
+        // //7, 20090, 20089
+        // console.log(show(this.vertices.pick(7,null)));
+        // console.log(show(this.vertices.pick(22090,null)));
+        // console.log(show(this.vertices.pick(22089,null)));
         drawScene();
 
         // Setup a ui.
@@ -186,9 +213,7 @@ class Renderer {
         webglLessonsUI.setupSlider("#angleX", { value: radToDeg(rotation[0]), slide: updateRotation(0), max: 360 });
         webglLessonsUI.setupSlider("#angleY", { value: radToDeg(rotation[1]), slide: updateRotation(1), max: 360 });
         webglLessonsUI.setupSlider("#angleZ", { value: radToDeg(rotation[2]), slide: updateRotation(2), max: 360 });
-        webglLessonsUI.setupSlider("#scaleX", { value: scale[0], slide: updateScale(0), min: -5, max: 5, step: 0.01, precision: 2 });
-        webglLessonsUI.setupSlider("#scaleY", { value: scale[1], slide: updateScale(1), min: -5, max: 5, step: 0.01, precision: 2 });
-        webglLessonsUI.setupSlider("#scaleZ", { value: scale[2], slide: updateScale(2), min: -5, max: 5, step: 0.01, precision: 2 });
+        webglLessonsUI.setupSlider("#F_num", { value: F_num, slide: updateF(), max: F });
 
         function updateFieldOfView(event, ui) {
             fieldOfViewRadians = degToRad(ui.value);
@@ -217,7 +242,12 @@ class Renderer {
                 drawScene();
             };
         }
-
+        function updateF(){
+            return function (event, ui) {
+                F_num=ui.value;
+                drawScene();
+            };
+        }
         // Draw the scene.
         function drawScene() {
             webglUtils.resizeCanvasToDisplaySize(gl.canvas);
@@ -245,168 +275,35 @@ class Renderer {
             var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
             var zNear = 1;
             var zFar = 2000;
+            //var matrix=m4.scaling(1,1,1);
             var matrix = m4.perspective(fieldOfViewRadians, aspect, zNear, zFar);
+            // //console.log(matrix);
+            // //var matrix = m4.projection(gl.canvas.clientWidth, gl.canvas.clientHeight, 400);
             matrix = m4.translate(matrix, translation[0], translation[1], translation[2]);
             matrix = m4.xRotate(matrix, rotation[0]);
             matrix = m4.yRotate(matrix, rotation[1]);
             matrix = m4.zRotate(matrix, rotation[2]);
-            matrix = m4.scale(matrix, scale[0], scale[1], scale[2]);
+            // matrix = m4.scale(matrix, scale[0], scale[1], scale[2]);
 
             // Set the matrix.
             gl.uniformMatrix4fv(matrixLocation, false, matrix);
-
+            gl.uniform4f(colorLocation, Math.random(), Math.random(), Math.random(), 1);
             // Draw the geometry.
             var primitiveType = gl.TRIANGLES;
             var offset = 0;
-            var count = 16 * 6;
-            gl.drawArrays(primitiveType, offset, count);
+            var count = F_num;
+            gl.drawElements(gl.TRIANGLES, count,gl.UNSIGNED_INT,offset);
+            //gl.drawArrays(gl.TRIANGLES,offset,count);
         }
     }
 
     // Fill the current ARRAY_BUFFER buffer
     // with the values that define a letter 'F'.
-    setGeometry(gl) {
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            this.v_homo,
-            gl.STATIC_DRAW);
-    }
+    // setGeometry(gl) {
+        
+    // }
 
-    // Fill the current ARRAY_BUFFER buffer with colors for the 'F'.
-    setColors(gl) {
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            new Uint8Array([
-                // left column front
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
 
-                // top rung front
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-
-                // middle rung front
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-                200, 70, 120,
-
-                // left column back
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-
-                // top rung back
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-
-                // middle rung back
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-                80, 70, 200,
-
-                // top
-                70, 200, 210,
-                70, 200, 210,
-                70, 200, 210,
-                70, 200, 210,
-                70, 200, 210,
-                70, 200, 210,
-
-                // top rung right
-                200, 200, 70,
-                200, 200, 70,
-                200, 200, 70,
-                200, 200, 70,
-                200, 200, 70,
-                200, 200, 70,
-
-                // under top rung
-                210, 100, 70,
-                210, 100, 70,
-                210, 100, 70,
-                210, 100, 70,
-                210, 100, 70,
-                210, 100, 70,
-
-                // between top rung and middle
-                210, 160, 70,
-                210, 160, 70,
-                210, 160, 70,
-                210, 160, 70,
-                210, 160, 70,
-                210, 160, 70,
-
-                // top of middle rung
-                70, 180, 210,
-                70, 180, 210,
-                70, 180, 210,
-                70, 180, 210,
-                70, 180, 210,
-                70, 180, 210,
-
-                // right of middle rung
-                100, 70, 210,
-                100, 70, 210,
-                100, 70, 210,
-                100, 70, 210,
-                100, 70, 210,
-                100, 70, 210,
-
-                // bottom of middle rung.
-                76, 210, 100,
-                76, 210, 100,
-                76, 210, 100,
-                76, 210, 100,
-                76, 210, 100,
-                76, 210, 100,
-
-                // right of bottom
-                140, 210, 80,
-                140, 210, 80,
-                140, 210, 80,
-                140, 210, 80,
-                140, 210, 80,
-                140, 210, 80,
-
-                // bottom
-                90, 130, 110,
-                90, 130, 110,
-                90, 130, 110,
-                90, 130, 110,
-                90, 130, 110,
-                90, 130, 110,
-
-                // left side
-                160, 160, 220,
-                160, 160, 220,
-                160, 160, 220,
-                160, 160, 220,
-                160, 160, 220,
-                160, 160, 220,
-            ]),
-            gl.STATIC_DRAW);
-    }
 }
 
 

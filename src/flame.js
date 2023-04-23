@@ -138,6 +138,7 @@ class FLAME {
         //3. Add pose blend shapes
         var rot_mats = this.rodrigues(reshape(pose, [-1, 3]));
         var J_nums = rot_mats.shape[0];
+        //console.log(show(reshape(rot_mats,[J_nums,3,3])));
 
         var pose_feature = zeros([J_nums - 1, 3, 3], 'float32');
         for (var i = 0; i < J_nums - 1; i++) {
@@ -168,37 +169,43 @@ class FLAME {
     }
     
     rodrigues(rot_vecs) {
-        addeqn(rot_vecs, 1e-8);
-
+        
         var angle = zeros([rot_vecs.shape[0], 1], 'float32');
         var sin = zeros([rot_vecs.shape[0]], 'float32');
         var one_mi_cos = zeros([rot_vecs.shape[0]], 'float32');
         var rot_dir = ndarray(rot_vecs.data.slice(), rot_vecs.shape);
-
+        //addeqn(rot_dir, 1e-8);
         for (var i = 0; i < rot_vecs.shape[0]; i++) {
             var norm = 0;
             for (var j = 0; j < 3; j++) {
-                norm += Math.pow(rot_vecs.get(i, j), 2);
+                norm += Math.pow(rot_vecs.get(i, j)+1e-8, 2);
             }
             norm = Math.sqrt(norm);
             sin.set(i, Math.sin(norm));
             one_mi_cos.set(i, 1 - Math.cos(norm));
             angle.set(i, 0, norm);
-            for (var j = 0; j < 3; j++) {
-                rot_dir.set(i, j, rot_dir.get(i, j) / norm);
-            }
-        }
 
+            ops.divseq(rot_dir.pick(i,null),norm);
+        }
+        // for(var i=0;i<rot_vecs.shape[0];i++){
+        //     ops.divs(rot_dir.pick(i,null),rot_vecs.pick(i,null),angle.get(i))
+        // }
+        
         var rx = rot_dir.pick(null, 0);
         var ry = rot_dir.pick(null, 1);
         var rz = rot_dir.pick(null, 2);
-        var rx_m = ops.mulseq(copy(rx), -1);
-        var ry_m = ops.mulseq(copy(ry), -1);
-        var rz_m = ops.mulseq(copy(rz), -1);
-
+        var rx_m=copy(rx),ry_m=copy(ry),rz_m=copy(rz);
+        ops.muls(rx_m,rx, -1.0);
+        ops.muls(ry_m,ry, -1.0);
+        ops.muls(rz_m,rz, -1.0);
+        //console.log(show(ry));
+        //console.log(show(ry_m));
+        //console.log(show(rz));
         var Z = zeros([rot_vecs.shape[0]], 'float32');
 
         var K = reshape_(concatColumns([Z, rz_m, ry, rz, Z, rx_m, ry_m, rx, Z]), [-1, 3, 3]);
+        
+
         var bmmK = zeros(K.shape, 'float32');
         var J_nums = K.shape[0];
         for (var i = 0; i < J_nums; i++) {

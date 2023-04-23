@@ -4,12 +4,16 @@ import FLAME from "./flame.js";
 import show from "ndarray-show";
 import zeros from "zeros";
 import Renderer from "./renderer.js";
-import { mul } from "ndarray-ops";
+import { addeq,subseq,addseq,mul } from "ndarray-ops";
 
 let n = new npyjs();
 async function loadnpy(url) {
     var npy = await n.load(url);
     return ndarray(npy.data, npy.shape);
+}
+async function loadnpyu(url) {
+    var npy = await n.load(url);
+    return ndarray(new Uint32Array(npy.data), npy.shape);
 }
 window.onload = async function () {
     pp = document.getElementById("timeTest");
@@ -22,7 +26,7 @@ window.onload = async function () {
     pp.innerHTML = 'common loaded\n';
 
     var vertices = (await loadnpy("mesh_data/meshes_0/vertices.npy"));
-    var faces = (await loadnpy("mesh_data/meshes_0/faces.npy"));
+    var faces = (await loadnpyu("mesh_data/meshes_0/faces.npy"));
     var faces_uv = (await loadnpy("mesh_data/meshes_0/faces_uv.npy"));
     pp.innerHTML += 'verts & faces loaded\n';
     var lbs_weights = (await loadnpy("mesh_data/meshes_0/lbs_weights.npy"));
@@ -44,16 +48,15 @@ window.onload = async function () {
     let flame = new FLAME(v_template, shapedirs_c, posedirs_c, J_regressor_c, parents_c, lbs_weights_c);
     let renderer = new Renderer(vertices, faces, lbs_weights, posedirs, shapedirs);
     var pose_feature, transform, retVal;
-
-    //pp.innerHTML=uvs.shape;
+    var i=0;
+    //for(i=0;i<50;i++){
+        //expression_params.set(10, -10);
+        pose_params.set(12,0);
+        retVal = await flame.lbs(expression_params, pose_params);
+        pose_feature = retVal.ret1;
+        transform = retVal.ret2;
+        await renderer.render(expression_params,transform,pose_feature);
+    //}
     
-    var st=Date.now();
-    //expression_params.set(0, 1);
-    //pose_params.set(0,1);
-    retVal = await flame.lbs(expression_params, pose_params);
-    pose_feature = retVal.ret1;
-    transform = retVal.ret2;
     
-    await renderer.render(expression_params,transform,pose_feature);
-    alert((Date.now()-st)+'ms');
 }
