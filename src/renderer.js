@@ -4,6 +4,7 @@ import cwise from "cwise";
 import zeros from "zeros";
 import { GPU } from "gpu.js";
 import show from "ndarray-show";
+import FLAME from "./flame.js";
 
 class Renderer {
     constructor(vertices, faces, lbs_weights, posedirs, shapedirs) {
@@ -17,27 +18,100 @@ class Renderer {
         this.gpu = new GPU();
         this.canvas = document.querySelector("#canvas");
         this.gl = this.canvas.getContext("webgl2");
+        this.index = new Int32Array(this.V);
+        for (var i = 0; i < this.V; i++) {
+            this.index[i] = i;
+        }
+        //console.log(this.index);
         this.vertexShaderSource = `#version 300 es
         // an attribute is an input (in) to a vertex shader.
         // It will receive data from a buffer
         in vec4 a_position;
-        uniform vec4 a_color;
+        in vec2 a_index;
+        int idx;
+        uniform sampler2D betasTex;
+        uniform sampler2D shapedirsTex;
+        uniform sampler2D posesTex;
+        uniform sampler2D posedirsTex;
+        uniform sampler2D transformTex;
+        uniform sampler2D lbsweightTex;
         // A matrix to transform the positions by
         uniform mat4 u_matrix;
         // a varying the color to the fragment shader
         out vec4 v_color;
+        float betas(int i){
+            return texelFetch(betasTex,ivec2(i,0),0).x;
+        }
+        float shapedirs(int i,int j,int k){
+            j=(i%11)*50+j;
+            i=i/11;
+            if(k==0) return texelFetch(shapedirsTex,ivec2(j,i),0).x;
+            if(k==1) return texelFetch(shapedirsTex,ivec2(j,i),0).y;
+            if(k==2) return texelFetch(shapedirsTex,ivec2(j,i),0).z;
+        }
+        float poses(int i){
+            return texelFetch(posesTex,ivec2(i,0),0).x;
+        }
+        float posedirs(int i,int j,int k){
+            j=(i%11)*36+j;
+            i=i/11;
+            if(k==0) return texelFetch(posedirsTex,ivec2(j,i),0).x;
+            if(k==1) return texelFetch(posedirsTex,ivec2(j,i),0).y;
+            if(k==2) return texelFetch(posedirsTex,ivec2(j,i),0).z;
+        }
+        float transform(int i,int j){
+            return texelFetch(transformTex,ivec2(j,i),0).x;
+        }
+        float lbsweight(int i,int j){
+            j=(i%11)*5+j;
+            i=i/11;
+            return texelFetch(lbsweightTex,ivec2(j,i),0).x;
+        }
         float random (vec2 st) {
             return fract(sin(dot(st.xy,vec2(12.9898,78.233)))*43758.5453123);
         }
+        vec4 shapeMatMul(){
+            vec4 sum=vec4(0,0,0,0);
+            float b=0.0;
+            for(int i=0;i<50;i++){
+                b=betas(i);
+                sum.x+=shapedirs(idx,i,0)*b;
+                sum.y+=shapedirs(idx,i,1)*b;
+                sum.z+=shapedirs(idx,i,2)*b;
+            }
+            return sum;
+        }
+        vec4 poseMatMul(){
+            vec4 sum=vec4(0,0,0,0);
+            float p=0.0;
+            for(int i=0;i<36;i++){
+                p=poses(i);
+                sum.x+=posedirs(idx,i,0)*p;
+                sum.y+=posedirs(idx,i,1)*p;
+                sum.z+=posedirs(idx,i,2)*p;
+            }
+            return sum;
+        }
+        mat4 lbsMatMul(){
+            mat4 rot=mat4(0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0);
+            for(int i=0;i<16;i++){
+                for(int j=0;j<5;j++){
+                    rot[i/4][i%4]+=lbsweight(idx,j)*transform(j,i);
+                }
+            }
+            return rot;
+        }
         // all shaders have a main function
-        void main() {
-            
-            // Multiply the position by the matrix.
-            vec4 apos=vec4(a_position.xyz*200.0f,1);
+        void main() { 
+            idx=int(a_index.x);
+            float fidx=float(idx);
+            vec4 apos=a_position;
+            apos+=shapeMatMul()+poseMatMul();
+            apos=lbsMatMul()*apos;
+            apos=vec4(apos.xyz*200.0f,1);
             gl_Position = u_matrix * (apos);
-        
             // Pass the color to the fragment shader.
-            v_color = vec4(random(a_position.xy),random(a_position.yz),random(a_position.zx),1);
+            v_color = vec4(idx,0,lbsweight(1,1),1);
         }`;
         this.fragmentShaderSource = `#version 300 es
             precision highp float;
@@ -72,7 +146,6 @@ class Renderer {
             }
             return sum + v[this.thread.x];
         }).setOutput([this.V * 3]);
-
         this.vertsmm = poseMatMul(pose_feature.data, this.posedirs.data, this.shapemm);
 
         const lbswMatMul = this.gpu.createKernel(function (a, b, J) {
@@ -98,9 +171,15 @@ class Renderer {
         //alert((Date.now()-st)+'ms');
     }
 
-    render(betas, transform, pose_feature) {
-
-        this.init(betas, transform, pose_feature);
+    async render(flame, betas, pose_params) {
+        var poses, transform;
+        async function forward(betas, pose_params) {
+            var retVal = await flame.lbs(betas, pose_params);
+            poses = retVal.ret1;
+            transform = retVal.ret2;
+        }
+        await forward(betas, pose_params);
+        this.init(betas, transform, poses);
 
         //console.log(this.v_homo);
         // Get A WebGL context
@@ -109,15 +188,50 @@ class Renderer {
         if (!gl) {
             return;
         }
-
+        // First let's make some variables
+        // to hold the translation,
+        var translation = [0, 0, -360];
+        var rotation = [0, 0, 0];
+        var scale = [1, 1, 1];
+        var fieldOfViewRadians = degToRad(45);
+        var F = this.faces.shape[0];
+        var F_num = F*3;
+        var J=transform.shape[0];
+        webglLessonsUI.setupSlider("#fieldOfView", { value: radToDeg(fieldOfViewRadians), slide: updateFieldOfView, min: 1, max: 179 });
+        webglLessonsUI.setupSlider("#x", { value: translation[0], slide: updatePosition(0), min: -200, max: 200 });
+        webglLessonsUI.setupSlider("#y", { value: translation[1], slide: updatePosition(1), min: -200, max: 200 });
+        webglLessonsUI.setupSlider("#z", { value: translation[2], slide: updatePosition(2), min: -1000, max: 0 });
+        webglLessonsUI.setupSlider("#angleX", { value: radToDeg(rotation[0]), slide: updateRotation(0), max: 360 });
+        webglLessonsUI.setupSlider("#angleY", { value: radToDeg(rotation[1]), slide: updateRotation(1), max: 360 });
+        webglLessonsUI.setupSlider("#angleZ", { value: radToDeg(rotation[2]), slide: updateRotation(2), max: 360 });
+        webglLessonsUI.setupSlider("#F_num", { value: F_num, slide: updateF(), max: F_num });
+        webglLessonsUI.setupSlider("#exp1", {
+            value: betas.data[0], slide: async function (e, ui) { 
+                betas.set(0, ui.value); 
+                await forward(betas, pose_params); 
+                setBetas(); setPoses(); setTransform();
+                drawScene(); }, step: 0.001, min: -2, max: 2, precision: 3
+        });
+        webglLessonsUI.setupSlider("#pose1", {
+            value: pose_params.data[6], slide: async function (e, ui) { 
+                pose_params.set(6, ui.value);
+                await forward(betas, pose_params); 
+                setBetas(); setPoses(); setTransform();
+                drawScene(); }, step: 0.001, min: -0.5, max: 0.5, precision: 3
+        });
         // Use our boilerplate utils to compile the shaders and link into a program
         var program = webglUtils.createProgramFromSources(gl,
             [this.vertexShaderSource, this.fragmentShaderSource]);
 
         // look up where the vertex data needs to go.
         var positionAttributeLocation = gl.getAttribLocation(program, "a_position");
-        //var colorAttributeLocation = gl.getAttribLocation(program, "a_color");
-        var colorLocation=gl.getUniformLocation(program,"a_color");
+        var indexAttributeLocation = gl.getAttribLocation(program, "a_index");
+        var betasLocation = gl.getUniformLocation(program, "betasTex");
+        var shapedirsLocation = gl.getUniformLocation(program, "shapedirsTex");
+        var posesLocation = gl.getUniformLocation(program, "posesTex");
+        var posedirsLocation = gl.getUniformLocation(program, "posedirsTex");
+        var transformLocation=gl.getUniformLocation(program,"transformTex");
+        var lbsweightLocation=gl.getUniformLocation(program,"lbsweightTex");
         // look up uniform locations
         var matrixLocation = gl.getUniformLocation(program, "u_matrix");
 
@@ -139,11 +253,11 @@ class Renderer {
         //console.log(this.vertices.data);
         gl.bufferData(
             gl.ARRAY_BUFFER,
-            this.v_homo,
+            this.vertices.data,
             gl.STATIC_DRAW);
 
         // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-        var size = 4;          // 3 components per iteration
+        var size = 3;          // 3 components per iteration
         var type = gl.FLOAT;   // the data is 32bit floats
         var normalize = false; // don't normalize the data
         var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
@@ -151,33 +265,135 @@ class Renderer {
         gl.vertexAttribPointer(
             positionAttributeLocation, size, type, normalize, stride, offset);
 
-        // // create the color buffer, make it the current ARRAY_BUFFER
-        // // and copy in the color values
-        // var colorBuffer = gl.createBuffer();
-        // gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-        // this.setColors(gl);
+        var vindexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vindexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, this.index, gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(indexAttributeLocation);
+        var size = 1;
+        var type = gl.INT;
+        var normalize = false;
+        var stride = 0;
+        var offset = 0;
+        gl.vertexAttribPointer(indexAttributeLocation, size, type, normalize, stride, offset);
 
-        // // Turn on the attribute
-        // gl.enableVertexAttribArray(colorAttributeLocation);
-
-        // // Tell the attribute how to get data out of colorBuffer (ARRAY_BUFFER)
-        // var size = 3;          // 3 components per iteration
-        // var type = gl.UNSIGNED_BYTE;   // the data is 8bit unsigned bytes
-        // var normalize = true;  // convert from 0-255 to 0.0-1.0
-        // var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next color
-        // var offset = 0;        // start at the beginning of the buffer
-        // gl.vertexAttribPointer(
-        //     colorAttributeLocation, size, type, normalize, stride, offset);
-        
         var indexBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer);
-        //console.log(this.faces.data);
-
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
         gl.bufferData(
             gl.ELEMENT_ARRAY_BUFFER,
             this.faces.data,
             gl.STATIC_DRAW
         )
+
+        function setBetas() {
+            var betasTexture = gl.createTexture();
+            gl.activeTexture(gl.TEXTURE0 + 0);
+            gl.bindTexture(gl.TEXTURE_2D, betasTexture);
+            var level = 0;
+            var internalFormat = gl.R32F;
+            var width = 50;
+            var height = 1;
+            var border = 0;
+            var format = gl.RED;
+            var type = gl.FLOAT;
+            //console.log(betas);
+            //gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+            gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, betas.data);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        }
+        setBetas();
+
+        var shapedirsTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + 1);
+        gl.bindTexture(gl.TEXTURE_2D, shapedirsTexture);
+        var level = 0;
+        var internalFormat = gl.RGB32F;
+        var height = 7283;// 80113/11
+        var width = 50 * 11;
+        var border = 0;
+        var format = gl.RGB;
+        var type = gl.FLOAT;
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, this.shapedirs.data);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        function setPoses() {
+            var posesTexture = gl.createTexture();
+            gl.activeTexture(gl.TEXTURE0 + 2);
+            gl.bindTexture(gl.TEXTURE_2D, posesTexture);
+            var level = 0;
+            var internalFormat = gl.R32F;
+            var width = 36;
+            var height = 1;
+            var border = 0;
+            var format = gl.RED;
+            var type = gl.FLOAT;
+            //poses.set(35,0.5);
+            gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, poses.data);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        }
+        setPoses();
+
+        var posedirsTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + 3);
+        gl.bindTexture(gl.TEXTURE_2D, posedirsTexture);
+        var level = 0;
+        var internalFormat = gl.RGB32F;
+        var height = 7283;// 80113/11
+        var width = 36 * 11;
+        var border = 0;
+        var format = gl.RGB;
+        var type = gl.FLOAT;
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, this.posedirs.data);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        function setTransform(){
+            var transformTexture = gl.createTexture();
+            gl.activeTexture(gl.TEXTURE0 + 4);
+            gl.bindTexture(gl.TEXTURE_2D, transformTexture);
+            var level = 0;
+            var internalFormat = gl.R32F;
+            var width = 16;
+            var height = 5;
+            var border = 0;
+            var format = gl.RED;
+            var type = gl.FLOAT;
+            //transform.set(4,2,3,0.5)
+            gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, transform.data);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        }
+        setTransform();
+
+        var lbsweightTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + 5);
+        gl.bindTexture(gl.TEXTURE_2D, lbsweightTexture);
+        var level = 0;
+        var internalFormat = gl.R32F;
+        var height = 7283;// 80113/11
+        var width = J * 11;
+        var border = 0;
+        var format = gl.RED;
+        var type = gl.FLOAT;
+        //console.log(this.lbs_weights,J);
+        //this.lbs_weights.set(1,1,1);
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, this.lbs_weights.data);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
         function radToDeg(r) {
             return r * 180 / Math.PI;
@@ -187,14 +403,7 @@ class Renderer {
             return d * Math.PI / 180;
         }
 
-        // First let's make some variables
-        // to hold the translation,
-        var translation = [0, 0, -360];
-        var rotation = [0, 0, 0];
-        var scale = [1, 1, 1];
-        var fieldOfViewRadians = degToRad(60);
-        var F=this.faces.shape[0]*3;
-        var F_num=F;
+
 
         // console.log(show(this.vertices.pick(3,null)));
         // console.log(show(this.vertices.pick(22066,null)));
@@ -203,17 +412,14 @@ class Renderer {
         // console.log(show(this.vertices.pick(7,null)));
         // console.log(show(this.vertices.pick(22090,null)));
         // console.log(show(this.vertices.pick(22089,null)));
+        console.log("start draw");
+        //var st=console.time("at");
+        //for(var i=0;i<10000;i++){
         drawScene();
-
+        //}
+        //console.log(console.timeEnd("at"));
         // Setup a ui.
-        webglLessonsUI.setupSlider("#fieldOfView", { value: radToDeg(fieldOfViewRadians), slide: updateFieldOfView, min: 1, max: 179 });
-        webglLessonsUI.setupSlider("#x", { value: translation[0], slide: updatePosition(0), min: -200, max: 200 });
-        webglLessonsUI.setupSlider("#y", { value: translation[1], slide: updatePosition(1), min: -200, max: 200 });
-        webglLessonsUI.setupSlider("#z", { value: translation[2], slide: updatePosition(2), min: -1000, max: 0 });
-        webglLessonsUI.setupSlider("#angleX", { value: radToDeg(rotation[0]), slide: updateRotation(0), max: 360 });
-        webglLessonsUI.setupSlider("#angleY", { value: radToDeg(rotation[1]), slide: updateRotation(1), max: 360 });
-        webglLessonsUI.setupSlider("#angleZ", { value: radToDeg(rotation[2]), slide: updateRotation(2), max: 360 });
-        webglLessonsUI.setupSlider("#F_num", { value: F_num, slide: updateF(), max: F });
+
 
         function updateFieldOfView(event, ui) {
             fieldOfViewRadians = degToRad(ui.value);
@@ -242,14 +448,15 @@ class Renderer {
                 drawScene();
             };
         }
-        function updateF(){
+        function updateF() {
             return function (event, ui) {
-                F_num=ui.value;
+                F_num = ui.value;
                 drawScene();
             };
         }
         // Draw the scene.
         function drawScene() {
+
             webglUtils.resizeCanvasToDisplaySize(gl.canvas);
 
             // Tell WebGL how to convert from clip space to pixels
@@ -287,20 +494,26 @@ class Renderer {
 
             // Set the matrix.
             gl.uniformMatrix4fv(matrixLocation, false, matrix);
-            gl.uniform4f(colorLocation, Math.random(), Math.random(), Math.random(), 1);
+            gl.uniform1i(betasLocation, 0);
+            gl.uniform1i(shapedirsLocation, 1);
+            gl.uniform1i(posesLocation, 2);
+            gl.uniform1i(posedirsLocation, 3);
+            gl.uniform1i(transformLocation, 4);
+            gl.uniform1i(lbsweightLocation, 5);
             // Draw the geometry.
             var primitiveType = gl.TRIANGLES;
             var offset = 0;
             var count = F_num;
-            gl.drawElements(gl.TRIANGLES, count,gl.UNSIGNED_INT,offset);
+            gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, offset);
             //gl.drawArrays(gl.TRIANGLES,offset,count);
+
         }
     }
 
     // Fill the current ARRAY_BUFFER buffer
     // with the values that define a letter 'F'.
     // setGeometry(gl) {
-        
+
     // }
 
 

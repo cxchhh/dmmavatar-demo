@@ -4,12 +4,12 @@ import FLAME from "./flame.js";
 import show from "ndarray-show";
 import zeros from "zeros";
 import Renderer from "./renderer.js";
-import { addeq,subseq,addseq,mul } from "ndarray-ops";
+import { addeq, subseq, addseq, mul } from "ndarray-ops";
 
 let n = new npyjs();
 async function loadnpy(url) {
     var npy = await n.load(url);
-    return ndarray(npy.data, npy.shape);
+    return ndarray(new Float32Array(npy.data), npy.shape);
 }
 async function loadnpyu(url) {
     var npy = await n.load(url);
@@ -17,7 +17,7 @@ async function loadnpyu(url) {
 }
 window.onload = async function () {
     pp = document.getElementById("timeTest");
-    var J_regressor_c = (await loadnpy("mesh_data/common/J_regressor.npy"));
+    var J_regressor_c=(await loadnpy("mesh_data/common/J_regressor.npy"));
     var parents_c = (await loadnpy("mesh_data/common/parents.npy"));
     var v_template = (await loadnpy("mesh_data/common/v_template.npy"));
     var shapedirs_c = (await loadnpy("mesh_data/common/shapedirs.npy"));
@@ -35,6 +35,7 @@ window.onload = async function () {
     var posedirs = (await loadnpy("mesh_data/meshes_0/posedirs.npy"));
     pp.innerHTML += 'posedirs loaded\n';
     var shapedirs = (await loadnpy("mesh_data/meshes_0/shapedirs.npy"));
+
     pp.innerHTML += 'shapedirs loaded\n';
     var uvs = (await loadnpy("mesh_data/meshes_0/uvs.npy"));
 
@@ -43,20 +44,18 @@ window.onload = async function () {
     var expression_params = zeros([50], 'float32');
     var pose_params = zeros([15], 'float32');
     var pp = document.getElementById("timeTest");
-    var V=vertices.shape[0];
+    var V = vertices.shape[0];
+    //var sh=ndarray(new Float32Array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]),[3,2,3]);
+    //var shn=ndarray(sh.data,[2,4,3]);
+    //console.log(shn);
 
     let flame = new FLAME(v_template, shapedirs_c, posedirs_c, J_regressor_c, parents_c, lbs_weights_c);
     let renderer = new Renderer(vertices, faces, lbs_weights, posedirs, shapedirs);
     var pose_feature, transform, retVal;
-    var i=0;
-    //for(i=0;i<50;i++){
-        //expression_params.set(10, -10);
-        pose_params.set(12,0);
-        retVal = await flame.lbs(expression_params, pose_params);
-        pose_feature = retVal.ret1;
-        transform = retVal.ret2;
-        await renderer.render(expression_params,transform,pose_feature);
-    //}
-    
-    
+    var i = 0;
+    //expression_params.set(0,0.5);
+    //expression_params.set(49, 1);
+    //pose_params.set(6, 0.2);
+    expression_params.set(0, 1);
+    await renderer.render(flame, expression_params, pose_params);
 }
