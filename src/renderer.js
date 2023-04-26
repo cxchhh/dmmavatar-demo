@@ -7,17 +7,27 @@ import show from "ndarray-show";
 import FLAME from "./flame.js";
 
 class Renderer {
-    constructor(vertices, faces, lbs_weights, posedirs, shapedirs) {
+    constructor(flame, vertices, faces, lbs_weights, posedirs, shapedirs, betas, pose_params) {
+        this.flame = flame;
         this.vertices = vertices;
         this.faces = faces;
         this.lbs_weights = lbs_weights;
         this.posedirs = posedirs;
         this.shapedirs = shapedirs;
+        this.betas = betas;
+        this.pose_params = pose_params;
         this.V = vertices.shape[0];
         this.J = lbs_weights.shape[1];
         this.gpu = new GPU();
         this.canvas = document.querySelector("#canvas");
         this.gl = this.canvas.getContext("webgl2");
+        // Get A WebGL context
+        /** @type {HTMLCanvasElement} */
+        var gl = this.gl;
+        if (!gl) {
+            alert("WebGL isn't available on your broswer!");
+            return;
+        }
         this.index = new Int32Array(this.V);
         for (var i = 0; i < this.V; i++) {
             this.index[i] = i;
@@ -96,22 +106,22 @@ class Renderer {
             mat4 rot=mat4(0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0);
             for(int i=0;i<16;i++){
                 for(int j=0;j<5;j++){
-                    rot[i/4][i%4]+=lbsweight(idx,j)*transform(j,i);
+                    rot[i>>2][i&3]+=lbsweight(idx,j)*transform(j,i);
                 }
             }
-            return rot;
+            return transpose(rot);
         }
         // all shaders have a main function
         void main() { 
             idx=int(a_index.x);
-            float fidx=float(idx);
+            //float fidx=float(idx);
             vec4 apos=a_position;
             apos+=shapeMatMul()+poseMatMul();
             apos=lbsMatMul()*apos;
             apos=vec4(apos.xyz*200.0f,1);
             gl_Position = u_matrix * (apos);
             // Pass the color to the fragment shader.
-            v_color = vec4(idx,0,lbsweight(1,1),1);
+            v_color = vec4(idx,0,0,1);
         }`;
         this.fragmentShaderSource = `#version 300 es
             precision highp float;
@@ -124,125 +134,117 @@ class Renderer {
 
             void main() {
                 outColor = v_color;
-            }`;
+        }`;
+        this.uiInit();
     }
 
-    init(betas, transform, pose_feature) {
-        //var st=Date.now();
-        const shapeMatMul = this.gpu.createKernel(function (a, b, v) {
-            let sum = 0;
-            for (let i = 0; i < 50; i++) {
-                sum += a[this.thread.x * 50 + i] * b[i];
-            }
-            return sum + v[this.thread.x];
-        }).setOutput([this.V * 3]);
-        this.shapemm = shapeMatMul(this.shapedirs.data, betas.data, this.vertices.data);
-        //alert((Date.now()-st)+'ms');
-        const poseMatMul = this.gpu.createKernel(function (a, b, v) {
-            let sum = 0;
-            let mo = this.thread.x % 3;
-            for (let i = 0; i < 36; i++) {
-                sum += a[i] * b[(((this.thread.x - mo) / 3) * 36 + i) * 3 + mo];
-            }
-            return sum + v[this.thread.x];
-        }).setOutput([this.V * 3]);
-        this.vertsmm = poseMatMul(pose_feature.data, this.posedirs.data, this.shapemm);
-
-        const lbswMatMul = this.gpu.createKernel(function (a, b, J) {
-            let sum = 0;
-            let mo = this.thread.x % 16;
-            for (let i = 0; i < J; i++) {
-                sum += a[i] * b[(((this.thread.x - mo) / 16) * J + i) * 16 + mo];
-            }
-            return sum;
-        }).setOutput([this.V * 16]);
-        this.lbswmm = lbswMatMul(this.lbs_weights.data, transform.data, this.J);
-        //var st=Date.now();
-        const homoMatMul = this.gpu.createKernel(function (a, b) {
-            let sum = 0;
-            let mo = this.thread.x % 4;
-            for (let i = 0; i < 3; i++) {
-                sum += a[this.thread.x * 4 + i] * b[((this.thread.x - mo) / 4) * 3 + i];
-            }
-            sum += a[this.thread.x * 4 + 3];
-            return sum;
-        }).setOutput([this.V * 4]);
-        this.v_homo = homoMatMul(this.lbswmm, this.vertsmm);
-        //alert((Date.now()-st)+'ms');
-    }
-
-    async render(flame, betas, pose_params) {
-        var poses, transform;
-        async function forward(betas, pose_params) {
-            var retVal = await flame.lbs(betas, pose_params);
-            poses = retVal.ret1;
-            transform = retVal.ret2;
-        }
-        await forward(betas, pose_params);
-        this.init(betas, transform, poses);
-
-        //console.log(this.v_homo);
-        // Get A WebGL context
-        /** @type {HTMLCanvasElement} */
-        var gl = this.gl;
-        if (!gl) {
-            return;
-        }
+    uiInit() {
         // First let's make some variables
         // to hold the translation,
-        var translation = [0, 0, -360];
-        var rotation = [0, 0, 0];
-        var scale = [1, 1, 1];
-        var fieldOfViewRadians = degToRad(45);
+        this.translation = [0, 0, -360];
+        this.rotation = [0, 0, 0];
+        this.fieldOfViewRadians = this.degToRad(45);
         var F = this.faces.shape[0];
-        var F_num = F*3;
-        var J=transform.shape[0];
-        webglLessonsUI.setupSlider("#fieldOfView", { value: radToDeg(fieldOfViewRadians), slide: updateFieldOfView, min: 1, max: 179 });
-        webglLessonsUI.setupSlider("#x", { value: translation[0], slide: updatePosition(0), min: -200, max: 200 });
-        webglLessonsUI.setupSlider("#y", { value: translation[1], slide: updatePosition(1), min: -200, max: 200 });
-        webglLessonsUI.setupSlider("#z", { value: translation[2], slide: updatePosition(2), min: -1000, max: 0 });
-        webglLessonsUI.setupSlider("#angleX", { value: radToDeg(rotation[0]), slide: updateRotation(0), max: 360 });
-        webglLessonsUI.setupSlider("#angleY", { value: radToDeg(rotation[1]), slide: updateRotation(1), max: 360 });
-        webglLessonsUI.setupSlider("#angleZ", { value: radToDeg(rotation[2]), slide: updateRotation(2), max: 360 });
-        webglLessonsUI.setupSlider("#F_num", { value: F_num, slide: updateF(), max: F_num });
-        webglLessonsUI.setupSlider("#exp1", {
-            value: betas.data[0], slide: async function (e, ui) { 
-                betas.set(0, ui.value); 
-                await forward(betas, pose_params); 
-                setBetas(); setPoses(); setTransform();
-                drawScene(); }, step: 0.001, min: -2, max: 2, precision: 3
-        });
-        webglLessonsUI.setupSlider("#pose1", {
-            value: pose_params.data[6], slide: async function (e, ui) { 
-                pose_params.set(6, ui.value);
-                await forward(betas, pose_params); 
-                setBetas(); setPoses(); setTransform();
-                drawScene(); }, step: 0.001, min: -0.5, max: 0.5, precision: 3
-        });
-        // Use our boilerplate utils to compile the shaders and link into a program
-        var program = webglUtils.createProgramFromSources(gl,
-            [this.vertexShaderSource, this.fragmentShaderSource]);
+        this.F_num = F * 3;
+        var th=this;
+        webglLessonsUI.setupSlider("#fieldOfView", { value: this.radToDeg(this.fieldOfViewRadians), slide: updateFieldOfView, min: 1, max: 179 });
+        webglLessonsUI.setupSlider("#x", { value: this.translation[0], slide: updatePosition(0), min: -200, max: 200 });
+        webglLessonsUI.setupSlider("#y", { value: this.translation[1], slide: updatePosition(1), min: -200, max: 200 });
+        webglLessonsUI.setupSlider("#z", { value: this.translation[2], slide: updatePosition(2), min: -1000, max: 0 });
+        webglLessonsUI.setupSlider("#angleX", { value: this.radToDeg(this.rotation[0]), slide: updateRotation(0), max: 360 });
+        webglLessonsUI.setupSlider("#angleY", { value: this.radToDeg(this.rotation[1]), slide: updateRotation(1), max: 360 });
+        webglLessonsUI.setupSlider("#angleZ", { value: this.radToDeg(this.rotation[2]), slide: updateRotation(2), max: 360 });
+        webglLessonsUI.setupSlider("#F_num", { value: this.F_num, slide: updateF(), max: this.F_num });
+        for(var i=0;i<50;i++)
+            webglLessonsUI.setupSlider("#exp"+(i+1), {
+            value: this.betas.data[i], slide: updateBetas(i), step: 0.001, min: -2, max: 2, precision: 3});
 
+        for(var i=0;i<15;i++)
+            webglLessonsUI.setupSlider("#pose"+(i+1), {
+            value: this.pose_params.data[i], slide: updatePoses(i), step: 0.001, min: -0.5, max: 0.5, precision: 3});
+        function updateBetas(i){
+            return async function (e, ui) {
+                th.betas.set(i, ui.value);
+                await th.forward(th.betas, th.pose_params);
+                th.setBetas(); th.setPoses(); th.setTransform();
+                th.drawScene();
+            }
+        }
+        function updatePoses(i){
+            return async function (e, ui) {
+                th.pose_params.set(i, ui.value);
+                await th.forward(th.betas, th.pose_params);
+                th.setBetas(); th.setPoses(); th.setTransform();
+                th.drawScene();
+            }
+        }
+        function updateFieldOfView(event, ui) {
+            th.fieldOfViewRadians = th.degToRad(ui.value);
+            th.drawScene();
+        }
+        function updatePosition(index) {
+            return function (event, ui) {
+                th.translation[index] = ui.value;
+                th.drawScene();
+            };
+        }
+        function updateRotation(index) {
+            return function (event, ui) {
+                var angleInDegrees = ui.value;
+                var angleInRadians = th.degToRad(angleInDegrees);
+                th.rotation[index] = angleInRadians;
+                th.drawScene();
+            };
+        }
+        function updateF() {
+            return function (event, ui) {
+                th.F_num = ui.value;
+                th.drawScene();
+            };
+        }
+    }
+    radToDeg(r) {
+        return r * 180 / Math.PI;
+    }
+
+    degToRad(d) {
+        return d * Math.PI / 180;
+    }
+    async forward(betas, pose_params) {
+        var retVal = await this.flame.lbs(betas, pose_params);
+        this.poses = retVal.ret1;
+        this.transform = retVal.ret2;
+    }
+    async render() {
+        var betas = this.betas;
+        var pose_params = this.pose_params;
+
+        await this.forward(betas, pose_params);
+        var gl = this.gl;
+
+        // Use our boilerplate utils to compile the shaders and link into a program
+        this.program = webglUtils.createProgramFromSources(gl, [this.vertexShaderSource, this.fragmentShaderSource]);
+        var program = this.program
         // look up where the vertex data needs to go.
         var positionAttributeLocation = gl.getAttribLocation(program, "a_position");
         var indexAttributeLocation = gl.getAttribLocation(program, "a_index");
-        var betasLocation = gl.getUniformLocation(program, "betasTex");
-        var shapedirsLocation = gl.getUniformLocation(program, "shapedirsTex");
-        var posesLocation = gl.getUniformLocation(program, "posesTex");
-        var posedirsLocation = gl.getUniformLocation(program, "posedirsTex");
-        var transformLocation=gl.getUniformLocation(program,"transformTex");
-        var lbsweightLocation=gl.getUniformLocation(program,"lbsweightTex");
+        this.betasLocation = gl.getUniformLocation(program, "betasTex");
+        this.shapedirsLocation = gl.getUniformLocation(program, "shapedirsTex");
+        this.posesLocation = gl.getUniformLocation(program, "posesTex");
+        this.posedirsLocation = gl.getUniformLocation(program, "posedirsTex");
+        this.transformLocation = gl.getUniformLocation(program, "transformTex");
+        this.lbsweightLocation = gl.getUniformLocation(program, "lbsweightTex");
         // look up uniform locations
-        var matrixLocation = gl.getUniformLocation(program, "u_matrix");
+        this.matrixLocation = gl.getUniformLocation(program, "u_matrix");
 
         // Create a buffer
         var positionBuffer = gl.createBuffer();
 
         // Create a vertex array object (attribute state)
-        var vao = gl.createVertexArray();
+        this.vao = gl.createVertexArray();
 
         // and make it the one we're currently working with
-        gl.bindVertexArray(vao);
+        gl.bindVertexArray(this.vao);
 
         // Turn on the attribute
         gl.enableVertexAttribArray(positionAttributeLocation);
@@ -284,26 +286,7 @@ class Renderer {
             gl.STATIC_DRAW
         )
 
-        function setBetas() {
-            var betasTexture = gl.createTexture();
-            gl.activeTexture(gl.TEXTURE0 + 0);
-            gl.bindTexture(gl.TEXTURE_2D, betasTexture);
-            var level = 0;
-            var internalFormat = gl.R32F;
-            var width = 50;
-            var height = 1;
-            var border = 0;
-            var format = gl.RED;
-            var type = gl.FLOAT;
-            //console.log(betas);
-            //gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-            gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, betas.data);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        }
-        setBetas();
+        this.setBetas();
 
         var shapedirsTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 1);
@@ -321,25 +304,7 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        function setPoses() {
-            var posesTexture = gl.createTexture();
-            gl.activeTexture(gl.TEXTURE0 + 2);
-            gl.bindTexture(gl.TEXTURE_2D, posesTexture);
-            var level = 0;
-            var internalFormat = gl.R32F;
-            var width = 36;
-            var height = 1;
-            var border = 0;
-            var format = gl.RED;
-            var type = gl.FLOAT;
-            //poses.set(35,0.5);
-            gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, poses.data);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        }
-        setPoses();
+        this.setPoses();
 
         var posedirsTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 3);
@@ -357,25 +322,7 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        function setTransform(){
-            var transformTexture = gl.createTexture();
-            gl.activeTexture(gl.TEXTURE0 + 4);
-            gl.bindTexture(gl.TEXTURE_2D, transformTexture);
-            var level = 0;
-            var internalFormat = gl.R32F;
-            var width = 16;
-            var height = 5;
-            var border = 0;
-            var format = gl.RED;
-            var type = gl.FLOAT;
-            //transform.set(4,2,3,0.5)
-            gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, transform.data);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        }
-        setTransform();
+        this.setTransform();
 
         var lbsweightTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 5);
@@ -383,7 +330,7 @@ class Renderer {
         var level = 0;
         var internalFormat = gl.R32F;
         var height = 7283;// 80113/11
-        var width = J * 11;
+        var width = this.J * 11;
         var border = 0;
         var format = gl.RED;
         var type = gl.FLOAT;
@@ -395,128 +342,120 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        function radToDeg(r) {
-            return r * 180 / Math.PI;
-        }
+        console.log("start rendering");
 
-        function degToRad(d) {
-            return d * Math.PI / 180;
-        }
+        this.drawScene();// Draw the scene.
+    }
+    drawScene() {
+        var gl = this.gl;
+        webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+        // Tell WebGL how to convert from clip space to pixels
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
+        // Clear the canvas
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
+        // turn on depth testing
+        gl.enable(gl.DEPTH_TEST);
 
-        // console.log(show(this.vertices.pick(3,null)));
-        // console.log(show(this.vertices.pick(22066,null)));
-        // console.log(show(this.vertices.pick(22065,null)));
-        // //7, 20090, 20089
-        // console.log(show(this.vertices.pick(7,null)));
-        // console.log(show(this.vertices.pick(22090,null)));
-        // console.log(show(this.vertices.pick(22089,null)));
-        console.log("start draw");
-        //var st=console.time("at");
-        //for(var i=0;i<10000;i++){
-        drawScene();
-        //}
-        //console.log(console.timeEnd("at"));
-        // Setup a ui.
+        // tell webgl to cull faces
+        gl.enable(gl.CULL_FACE);
 
+        // Tell it to use our program (pair of shaders)
+        gl.useProgram(this.program);
 
-        function updateFieldOfView(event, ui) {
-            fieldOfViewRadians = degToRad(ui.value);
-            drawScene();
-        }
+        // Bind the attribute/buffer set we want.
+        gl.bindVertexArray(this.vao);
 
-        function updatePosition(index) {
-            return function (event, ui) {
-                translation[index] = ui.value;
-                drawScene();
-            };
-        }
+        // Compute the matrix
+        var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+        var zNear = 1;
+        var zFar = 2000;
+        //var matrix=m4.scaling(1,1,1);
+        var matrix = m4.perspective(this.fieldOfViewRadians, aspect, zNear, zFar);
+        // //console.log(matrix);
+        // //var matrix = m4.projection(gl.canvas.clientWidth, gl.canvas.clientHeight, 400);
+        matrix = m4.translate(matrix, this.translation[0], this.translation[1], this.translation[2]);
+        matrix = m4.xRotate(matrix, this.rotation[0]);
+        matrix = m4.yRotate(matrix, this.rotation[1]);
+        matrix = m4.zRotate(matrix, this.rotation[2]);
 
-        function updateRotation(index) {
-            return function (event, ui) {
-                var angleInDegrees = ui.value;
-                var angleInRadians = degToRad(angleInDegrees);
-                rotation[index] = angleInRadians;
-                drawScene();
-            };
-        }
+        this.matrix = matrix;
+        // Set the matrix.
+        gl.uniformMatrix4fv(this.matrixLocation, false, this.matrix);
+        gl.uniform1i(this.betasLocation, 0);
+        gl.uniform1i(this.shapedirsLocation, 1);
+        gl.uniform1i(this.posesLocation, 2);
+        gl.uniform1i(this.posedirsLocation, 3);
+        gl.uniform1i(this.transformLocation, 4);
+        gl.uniform1i(this.lbsweightLocation, 5);
+        // Draw the geometry.
+        var primitiveType = gl.TRIANGLES;
+        var offset = 0;
+        var count = this.F_num;
+        gl.drawElements(primitiveType, count, gl.UNSIGNED_INT, offset);
+        //gl.drawArrays(gl.TRIANGLES,offset,count);
 
-        function updateScale(index) {
-            return function (event, ui) {
-                scale[index] = ui.value;
-                drawScene();
-            };
-        }
-        function updateF() {
-            return function (event, ui) {
-                F_num = ui.value;
-                drawScene();
-            };
-        }
-        // Draw the scene.
-        function drawScene() {
-
-            webglUtils.resizeCanvasToDisplaySize(gl.canvas);
-
-            // Tell WebGL how to convert from clip space to pixels
-            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-
-            // Clear the canvas
-            gl.clearColor(0, 0, 0, 0);
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-            // turn on depth testing
-            gl.enable(gl.DEPTH_TEST);
-
-            // tell webgl to cull faces
-            gl.enable(gl.CULL_FACE);
-
-            // Tell it to use our program (pair of shaders)
-            gl.useProgram(program);
-
-            // Bind the attribute/buffer set we want.
-            gl.bindVertexArray(vao);
-
-            // Compute the matrix
-            var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-            var zNear = 1;
-            var zFar = 2000;
-            //var matrix=m4.scaling(1,1,1);
-            var matrix = m4.perspective(fieldOfViewRadians, aspect, zNear, zFar);
-            // //console.log(matrix);
-            // //var matrix = m4.projection(gl.canvas.clientWidth, gl.canvas.clientHeight, 400);
-            matrix = m4.translate(matrix, translation[0], translation[1], translation[2]);
-            matrix = m4.xRotate(matrix, rotation[0]);
-            matrix = m4.yRotate(matrix, rotation[1]);
-            matrix = m4.zRotate(matrix, rotation[2]);
-            // matrix = m4.scale(matrix, scale[0], scale[1], scale[2]);
-
-            // Set the matrix.
-            gl.uniformMatrix4fv(matrixLocation, false, matrix);
-            gl.uniform1i(betasLocation, 0);
-            gl.uniform1i(shapedirsLocation, 1);
-            gl.uniform1i(posesLocation, 2);
-            gl.uniform1i(posedirsLocation, 3);
-            gl.uniform1i(transformLocation, 4);
-            gl.uniform1i(lbsweightLocation, 5);
-            // Draw the geometry.
-            var primitiveType = gl.TRIANGLES;
-            var offset = 0;
-            var count = F_num;
-            gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, offset);
-            //gl.drawArrays(gl.TRIANGLES,offset,count);
-
-        }
     }
 
-    // Fill the current ARRAY_BUFFER buffer
-    // with the values that define a letter 'F'.
-    // setGeometry(gl) {
-
-    // }
-
-
+    setBetas() {
+        var gl = this.gl;
+        var betasTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + 0);
+        gl.bindTexture(gl.TEXTURE_2D, betasTexture);
+        var level = 0;
+        var internalFormat = gl.R32F;
+        var width = 50;
+        var height = 1;
+        var border = 0;
+        var format = gl.RED;
+        var type = gl.FLOAT;
+        //console.log(betas);
+        //gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, this.betas.data);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+    setPoses() {
+        var gl = this.gl;
+        var posesTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + 2);
+        gl.bindTexture(gl.TEXTURE_2D, posesTexture);
+        var level = 0;
+        var internalFormat = gl.R32F;
+        var width = 36;
+        var height = 1;
+        var border = 0;
+        var format = gl.RED;
+        var type = gl.FLOAT;
+        //poses.set(35,0.5);
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, this.poses.data);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+    setTransform() {
+        var gl = this.gl;
+        var transformTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + 4);
+        gl.bindTexture(gl.TEXTURE_2D, transformTexture);
+        var level = 0;
+        var internalFormat = gl.R32F;
+        var width = 16;
+        var height = 5;
+        var border = 0;
+        var format = gl.RED;
+        var type = gl.FLOAT;
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, format, type, this.transform.data);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
 }
 
 
@@ -673,5 +612,4 @@ var m4 = {
 
 };
 
-//render();
 export default Renderer;
