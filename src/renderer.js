@@ -146,23 +146,25 @@ class Renderer {
         this.fieldOfViewRadians = this.degToRad(45);
         var F = this.faces.shape[0];
         this.F_num = F * 3;
-        var th=this;
+        var th = this;
         webglLessonsUI.setupSlider("#fieldOfView", { value: this.radToDeg(this.fieldOfViewRadians), slide: updateFieldOfView, min: 1, max: 179 });
-        webglLessonsUI.setupSlider("#x", { value: this.translation[0], slide: updatePosition(0), min: -200, max: 200 });
-        webglLessonsUI.setupSlider("#y", { value: this.translation[1], slide: updatePosition(1), min: -200, max: 200 });
-        webglLessonsUI.setupSlider("#z", { value: this.translation[2], slide: updatePosition(2), min: -1000, max: 0 });
+        //webglLessonsUI.setupSlider("#x", { value: this.translation[0], slide: updatePosition(0), min: -200, max: 200 });
+        //webglLessonsUI.setupSlider("#y", { value: this.translation[1], slide: updatePosition(1), min: -200, max: 200 });
+        //webglLessonsUI.setupSlider("#z", { value: this.translation[2], slide: updatePosition(2), min: -1000, max: 0 });
         webglLessonsUI.setupSlider("#angleX", { value: this.radToDeg(this.rotation[0]), slide: updateRotation(0), max: 360 });
         webglLessonsUI.setupSlider("#angleY", { value: this.radToDeg(this.rotation[1]), slide: updateRotation(1), max: 360 });
         webglLessonsUI.setupSlider("#angleZ", { value: this.radToDeg(this.rotation[2]), slide: updateRotation(2), max: 360 });
         webglLessonsUI.setupSlider("#F_num", { value: this.F_num, slide: updateF(), max: this.F_num });
-        for(var i=0;i<50;i++)
-            webglLessonsUI.setupSlider("#exp"+(i+1), {
-            value: this.betas.data[i], slide: updateBetas(i), step: 0.001, min: -2, max: 2, precision: 3});
+        for (var i = 0; i < 50; i++)
+            webglLessonsUI.setupSlider("#exp" + (i + 1), {
+                value: this.betas.data[i], slide: updateBetas(i), step: 0.001, min: -2, max: 2, precision: 3
+            });
 
-        for(var i=0;i<15;i++)
-            webglLessonsUI.setupSlider("#pose"+(i+1), {
-            value: this.pose_params.data[i], slide: updatePoses(i), step: 0.001, min: -0.5, max: 0.5, precision: 3});
-        function updateBetas(i){
+        for (var i = 0; i < 15; i++)
+            webglLessonsUI.setupSlider("#pose" + (i + 1), {
+                value: this.pose_params.data[i], slide: updatePoses(i), step: 0.001, min: -0.5, max: 0.5, precision: 3
+            });
+        function updateBetas(i) {
             return async function (e, ui) {
                 th.betas.set(i, ui.value);
                 await th.forward(th.betas, th.pose_params);
@@ -170,7 +172,7 @@ class Renderer {
                 th.drawScene();
             }
         }
-        function updatePoses(i){
+        function updatePoses(i) {
             return async function (e, ui) {
                 th.pose_params.set(i, ui.value);
                 await th.forward(th.betas, th.pose_params);
@@ -202,6 +204,70 @@ class Renderer {
                 th.drawScene();
             };
         }
+        this.canvas.addEventListener('contextmenu',function(e){
+			e.preventDefault();
+		})
+        var lastx = 0, lasty = 0, incanvas = true, down = false, basex, basey,btn=0;
+        this.canvas.onmouseenter = function (e) {
+            incanvas = true;
+            unScroll();
+        }
+        this.canvas.onmouseleave = function (e) {
+            incanvas = false;
+            down = false;
+            removeUnScroll();
+        }
+        this.canvas.onmousedown = function (e) {
+            if (!incanvas) return;
+            down = true;
+            if(e.button==0){
+                btn=0;
+                lastx = e.clientX;
+                lasty = e.clientY;
+                basex = th.translation[0];
+                basey = th.translation[1];
+            }
+            else if(e.button==2){
+                btn=2;
+            }
+            //console.log(e.button);
+        }
+        this.canvas.onmousemove = function (e) {
+            if (!down) return;
+            if(btn==0){
+                th.translation[0] = basex + e.clientX - lastx;
+                th.translation[1] = basey - (e.clientY - lasty);
+            }
+            
+            th.drawScene();
+        }
+        this.canvas.onmouseup = function (e) {
+            if (!incanvas) return;
+            down = false;
+        }
+        this.canvas.onwheel = function (e) {
+            if (!incanvas) return;
+            //th.fieldOfViewRadians += e.wheelDelta / 100;
+            //if (th.fieldOfViewRadians < th.degToRad(1)) th.fieldOfViewRadians = th.degToRad(1);
+            //if (th.fieldOfViewRadians > th.degToRad(179)) th.fieldOfViewRadians = th.degToRad(179);
+            //console.log(th.fieldOfViewRadians)
+            th.translation[2]+=e.wheelDelta;
+            if(th.translation[2]>1) th.translation[2]=1;
+            if(th.translation[2]<-1000) th.translation[2]=-1000;
+            th.drawScene();
+        }
+        //禁用滚动条
+        function unScroll() {
+            var top = $(document).scrollTop();
+            $(document).on('scroll.unable', function (e) {
+                $(document).scrollTop(top);
+            })
+        }
+        //停止禁用滚动条
+        function removeUnScroll() {
+            $(document).unbind("scroll.unable");
+        }
+
     }
     radToDeg(r) {
         return r * 180 / Math.PI;
@@ -360,7 +426,7 @@ class Renderer {
         gl.enable(gl.DEPTH_TEST);
 
         // tell webgl to cull faces
-        gl.enable(gl.CULL_FACE);
+        //gl.enable(gl.CULL_FACE);
 
         // Tell it to use our program (pair of shaders)
         gl.useProgram(this.program);
@@ -376,11 +442,11 @@ class Renderer {
         var matrix = m4.perspective(this.fieldOfViewRadians, aspect, zNear, zFar);
         // //console.log(matrix);
         // //var matrix = m4.projection(gl.canvas.clientWidth, gl.canvas.clientHeight, 400);
-        matrix = m4.translate(matrix, this.translation[0], this.translation[1], this.translation[2]);
+
         matrix = m4.xRotate(matrix, this.rotation[0]);
         matrix = m4.yRotate(matrix, this.rotation[1]);
         matrix = m4.zRotate(matrix, this.rotation[2]);
-
+        matrix = m4.translate(matrix, this.translation[0], this.translation[1], this.translation[2]);
         this.matrix = matrix;
         // Set the matrix.
         gl.uniformMatrix4fv(this.matrixLocation, false, this.matrix);
