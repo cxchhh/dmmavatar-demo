@@ -49,6 +49,7 @@ class Renderer {
     this.vertexShaderSource = `#version 300 es
         // an attribute is an input (in) to a vertex shader.
         // It will receive data from a buffer
+        #define VINROW 40
         in vec4 a_position;
         in vec3 a_normal;
         in vec2 a_index;
@@ -73,8 +74,8 @@ class Renderer {
             return texelFetch(betasTex,ivec2(i,0),0).x;
         }
         float shapedirs(int i,int j,int k){
-            j=(i%11)*50+j;
-            i=i/11;
+            j=(i%VINROW)*50+j;
+            i=i/VINROW;
             if(k==0) return texelFetch(shapedirsTex,ivec2(j,i),0).x;
             if(k==1) return texelFetch(shapedirsTex,ivec2(j,i),0).y;
             if(k==2) return texelFetch(shapedirsTex,ivec2(j,i),0).z;
@@ -83,8 +84,8 @@ class Renderer {
             return texelFetch(posesTex,ivec2(i,0),0).x;
         }
         float posedirs(int i,int j,int k){
-            j=(i%11)*36+j;
-            i=i/11;
+            j=(i%VINROW)*36+j;
+            i=i/VINROW;
             if(k==0) return texelFetch(posedirsTex,ivec2(j,i),0).x;
             if(k==1) return texelFetch(posedirsTex,ivec2(j,i),0).y;
             if(k==2) return texelFetch(posedirsTex,ivec2(j,i),0).z;
@@ -93,8 +94,8 @@ class Renderer {
             return texelFetch(transformTex,ivec2(j,i),0).x;
         }
         float lbsweight(int i,int j){
-            j=(i%11)*${this.J}+j;
-            i=i/11;
+            j=(i%VINROW)*${this.J}+j;
+            i=i/VINROW;
             return texelFetch(lbsweightTex,ivec2(j,i),0).x;
         }
         float random (vec2 st) {
@@ -158,8 +159,8 @@ class Renderer {
             out vec4 outColor;
             void main() {
                 outColor = vec4((v_normal+1.0)/2.0,1);
+                //outColor = vec4(0,0,0,1);
         }`;
-    
   }
 
   uiInit() {
@@ -452,7 +453,7 @@ class Renderer {
     var normalize = false;
     var stride = 0;
     var offset = 0;
-    console.log(this.uvs);
+    //console.log(this.uvs);
     gl.vertexAttribPointer(
       uvsAttributeLocation,
       size,
@@ -491,11 +492,14 @@ class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, shapedirsTexture);
     var level = 0;
     var internalFormat = gl.RGB32F;
-    var height = 7283; // 80113/11
-    var width = 50 * 11;
+    var height = Math.ceil(this.V / 40); // 80113/40
+    var width = 50 * 40;
     var border = 0;
     var format = gl.RGB;
     var type = gl.FLOAT;
+    var shapedata=new Float32Array(height*width*3);
+    shapedata.set(this.shapedirs.data,0);
+    //console.log(shapedata);
     gl.texImage2D(
       gl.TEXTURE_2D,
       level,
@@ -505,7 +509,7 @@ class Renderer {
       border,
       format,
       type,
-      this.shapedirs.data
+      shapedata
     );
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -519,11 +523,13 @@ class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, posedirsTexture);
     var level = 0;
     var internalFormat = gl.RGB32F;
-    var height = 7283; // 80113/11
-    var width = 36 * 11;
+    var height = Math.ceil(this.V / 40); // 80113/40
+    var width = 36 * 40;
     var border = 0;
     var format = gl.RGB;
     var type = gl.FLOAT;
+    var posedata=new Float32Array(height*width*3);
+    posedata.set(this.posedirs.data,0);
     gl.texImage2D(
       gl.TEXTURE_2D,
       level,
@@ -533,7 +539,7 @@ class Renderer {
       border,
       format,
       type,
-      this.posedirs.data
+      posedata
     );
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -547,13 +553,14 @@ class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, lbsweightTexture);
     var level = 0;
     var internalFormat = gl.R32F;
-    var height = 7283; // 80113/11
-    var width = this.J * 11;
+    var height = Math.ceil(this.V / 40); // 80113/40
+    var width = this.J * 40;
     var border = 0;
     var format = gl.RED;
     var type = gl.FLOAT;
-    //console.log(this.lbs_weights,J);
-    //this.lbs_weights.set(1,1,1);
+    var lbswdata=new Float32Array(height*width);
+    lbswdata.set(this.lbs_weights.data,0);
+    
     gl.texImage2D(
       gl.TEXTURE_2D,
       level,
@@ -563,7 +570,7 @@ class Renderer {
       border,
       format,
       type,
-      this.lbs_weights.data
+      lbswdata
     );
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -1059,3 +1066,6 @@ var m4 = {
 };
 
 export default Renderer;
+var copy = function (arr) {
+    return ndarray(arr.data.slice(), arr.shape);
+}

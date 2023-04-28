@@ -67,5 +67,6 @@ window.onload = async function () {
 
   //expression_params.set(0, 0);
   //pose_params.set(6, 0.2);
+  //alert(shapedirs.shape)
   await renderer.render();
 };
