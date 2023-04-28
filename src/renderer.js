@@ -226,7 +226,7 @@ class Renderer {
         th.setBetas();
         th.setPoses();
         th.setTransform();
-        th.drawScene();
+        ////th.drawScene();
       };
     }
     function updatePoses(i) {
@@ -236,17 +236,17 @@ class Renderer {
         th.setBetas();
         th.setPoses();
         th.setTransform();
-        th.drawScene();
+        //th.drawScene();
       };
     }
     function updateFieldOfView(event, ui) {
       th.fieldOfViewRadians = th.degToRad(ui.value);
-      th.drawScene();
+      ////th.drawScene();
     }
     function updatePosition(index) {
       return function (event, ui) {
         th.translation[index] = ui.value;
-        th.drawScene();
+        //th.drawScene();
       };
     }
     function updateRotation(index) {
@@ -254,13 +254,13 @@ class Renderer {
         var angleInDegrees = ui.value;
         var angleInRadians = th.degToRad(angleInDegrees);
         th.rotation[index] = angleInRadians;
-        th.drawScene();
+        //th.drawScene();
       };
     }
     function updateF() {
       return function (event, ui) {
         th.F_num = ui.value;
-        th.drawScene();
+        //th.drawScene();
       };
     }
     this.canvas.addEventListener("contextmenu", function (e) {
@@ -303,7 +303,7 @@ class Renderer {
         th.translation[1] = basey - (e.clientY - lasty);
       }
 
-      th.drawScene();
+      ////th.drawScene();
     };
     this.canvas.onmouseup = function (e) {
       if (!incanvas) return;
@@ -318,7 +318,7 @@ class Renderer {
       th.translation[2] += e.wheelDelta;
       if (th.translation[2] > 1) th.translation[2] = 1;
       if (th.translation[2] < -1000) th.translation[2] = -1000;
-      th.drawScene();
+      //th.drawScene();
     };
     //禁用滚动条
     function unScroll() {
@@ -331,6 +331,18 @@ class Renderer {
     function removeUnScroll() {
       $(document).unbind("scroll.unable");
     }
+
+    var lastTime = performance.now();
+    var timeTest = document.getElementById("timeTest");
+    function drawLoop() {
+      th.drawScene();
+      var now = performance.now();
+      var time = now - lastTime;
+      lastTime = now;
+      timeTest.innerHTML = "FPS:" + (1000 / time).toFixed(2);
+      requestAnimationFrame(drawLoop);
+    }
+    requestAnimationFrame(drawLoop);
   }
   radToDeg(r) {
     return (r * 180) / Math.PI;
