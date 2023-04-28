@@ -157,7 +157,7 @@ class Renderer {
             // we need to declare an output for the fragment shader
             out vec4 outColor;
             void main() {
-                outColor = vec4((v_viewdir+1.0)/2.0,1);
+                outColor = vec4((v_normal+1.0)/2.0,1);
         }`;
     this.uiInit();
   }
@@ -332,14 +332,18 @@ class Renderer {
       $(document).unbind("scroll.unable");
     }
 
+    var framwCount = 0;
     var lastTime = performance.now();
     var timeTest = document.getElementById("timeTest");
     function drawLoop() {
       th.drawScene();
-      var now = performance.now();
-      var time = now - lastTime;
-      lastTime = now;
-      timeTest.innerHTML = "FPS:" + (1000 / time).toFixed(2);
+      framwCount++;
+      if (framwCount % 10 == 0) {
+        var now = performance.now();
+        var time = now - lastTime;
+        lastTime = now;
+        timeTest.innerHTML = "FPS:" + (1000 / (time / 10)).toFixed(2);
+      }
       requestAnimationFrame(drawLoop);
     }
     requestAnimationFrame(drawLoop);
