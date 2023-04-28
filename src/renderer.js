@@ -159,7 +159,7 @@ class Renderer {
             void main() {
                 outColor = vec4((v_normal+1.0)/2.0,1);
         }`;
-    this.uiInit();
+    
   }
 
   uiInit() {
@@ -571,8 +571,7 @@ class Renderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     console.log("start rendering");
-
-    this.drawScene(); // Draw the scene.
+    this.uiInit();
   }
   drawScene() {
     var gl = this.gl;
@@ -588,7 +587,7 @@ class Renderer {
     gl.enable(gl.DEPTH_TEST);
 
     // tell webgl to cull faces
-    //gl.enable(gl.CULL_FACE);
+    gl.enable(gl.CULL_FACE);
 
     // Tell it to use our program (pair of shaders)
     gl.useProgram(this.program);
