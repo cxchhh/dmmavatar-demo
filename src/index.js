@@ -46,7 +46,7 @@ window.onload = async function () {
     var V = vertices.shape[0];
 
     let flame = new FLAME(v_template, shapedirs_c, posedirs_c, J_regressor_c, parents_c);
-    let renderer = new Renderer(flame, vertices, faces, lbs_weights, posedirs, shapedirs, expression_params, pose_params);
+    let renderer = new Renderer(flame, vertices, faces, lbs_weights, posedirs, shapedirs, expression_params, pose_params, uvs);
     
     //expression_params.set(0, 0);
     //pose_params.set(6, 0.2);

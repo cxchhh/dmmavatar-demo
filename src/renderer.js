@@ -7,7 +7,7 @@ import show from "ndarray-show";
 import FLAME from "./flame.js";
 
 class Renderer {
-    constructor(flame, vertices, faces, lbs_weights, posedirs, shapedirs, betas, pose_params) {
+    constructor(flame, vertices, faces, lbs_weights, posedirs, shapedirs, betas, pose_params,uvs) {
         this.flame = flame;
         this.vertices = vertices;
         this.faces = faces;
@@ -16,6 +16,7 @@ class Renderer {
         this.shapedirs = shapedirs;
         this.betas = betas;
         this.pose_params = pose_params;
+        this.uvs=uvs;
         this.V = vertices.shape[0];
         this.J = lbs_weights.shape[1];
         this.gpu = new GPU();
@@ -38,6 +39,7 @@ class Renderer {
         // It will receive data from a buffer
         in vec4 a_position;
         in vec2 a_index;
+        in vec2 a_uv;
         int idx;
         uniform sampler2D betasTex;
         uniform sampler2D shapedirsTex;
@@ -48,7 +50,8 @@ class Renderer {
         // A matrix to transform the positions by
         uniform mat4 u_matrix;
         // a varying the color to the fragment shader
-        out vec4 v_color;
+        //out vec4 v_color;
+        out vec2 v_uv;
         float betas(int i){
             return texelFetch(betasTex,ivec2(i,0),0).x;
         }
@@ -114,26 +117,27 @@ class Renderer {
         // all shaders have a main function
         void main() { 
             idx=int(a_index.x);
-            //float fidx=float(idx);
+            float fidx=float(idx);
             vec4 apos=a_position;
             apos+=shapeMatMul()+poseMatMul();
             apos=lbsMatMul()*apos;
             apos=vec4(apos.xyz*200.0f,1);
             gl_Position = u_matrix * (apos);
             // Pass the color to the fragment shader.
-            v_color = vec4(idx,0,0,1);
+            //v_color = vec4(fidx/80113.0,0,0,1);
+            v_uv=a_uv;
         }`;
         this.fragmentShaderSource = `#version 300 es
             precision highp float;
 
             // the varied color passed from the vertex shader
-            in vec4 v_color;
-
+            //in vec4 v_color;
+            in vec2 v_uv;
             // we need to declare an output for the fragment shader
             out vec4 outColor;
 
             void main() {
-                outColor = v_color;
+                outColor = vec4(v_uv.x,v_uv.y,0,1);
         }`;
         this.uiInit();
     }
@@ -300,6 +304,7 @@ class Renderer {
         this.posedirsLocation = gl.getUniformLocation(program, "posedirsTex");
         this.transformLocation = gl.getUniformLocation(program, "transformTex");
         this.lbsweightLocation = gl.getUniformLocation(program, "lbsweightTex");
+        var uvsAttributeLocation = gl.getAttribLocation(program, "a_uv");
         // look up uniform locations
         this.matrixLocation = gl.getUniformLocation(program, "u_matrix");
 
@@ -343,6 +348,18 @@ class Renderer {
         var stride = 0;
         var offset = 0;
         gl.vertexAttribPointer(indexAttributeLocation, size, type, normalize, stride, offset);
+
+        var uvsBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, uvsBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, this.uvs.data, gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(uvsAttributeLocation);
+        var size = 2;
+        var type = gl.FLOAT;
+        var normalize = false;
+        var stride = 0;
+        var offset = 0;
+        console.log(this.uvs);
+        gl.vertexAttribPointer(uvsAttributeLocation, size, type, normalize, stride, offset);
 
         var indexBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
@@ -407,6 +424,8 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        
 
         console.log("start rendering");
 
