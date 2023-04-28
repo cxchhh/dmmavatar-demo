@@ -73,22 +73,18 @@ class Renderer {
         float betas(int i){
             return texelFetch(betasTex,ivec2(i,0),0).x;
         }
-        float shapedirs(int i,int j,int k){
+        vec3 shapedirs(int i,int j){
             j=(i%VINROW)*50+j;
             i=i/VINROW;
-            if(k==0) return texelFetch(shapedirsTex,ivec2(j,i),0).x;
-            if(k==1) return texelFetch(shapedirsTex,ivec2(j,i),0).y;
-            if(k==2) return texelFetch(shapedirsTex,ivec2(j,i),0).z;
+            return texelFetch(shapedirsTex,ivec2(j,i),0).xyz;
         }
         float poses(int i){
             return texelFetch(posesTex,ivec2(i,0),0).x;
         }
-        float posedirs(int i,int j,int k){
+        vec3 posedirs(int i,int j){
             j=(i%VINROW)*36+j;
             i=i/VINROW;
-            if(k==0) return texelFetch(posedirsTex,ivec2(j,i),0).x;
-            if(k==1) return texelFetch(posedirsTex,ivec2(j,i),0).y;
-            if(k==2) return texelFetch(posedirsTex,ivec2(j,i),0).z;
+            return texelFetch(posedirsTex,ivec2(j,i),0).xyz;
         }
         float transform(int i,int j){
             return texelFetch(transformTex,ivec2(j,i),0).x;
@@ -106,9 +102,7 @@ class Renderer {
             float b=0.0;
             for(int i=0;i<50;i++){
                 b=betas(i);
-                sum.x+=shapedirs(idx,i,0)*b;
-                sum.y+=shapedirs(idx,i,1)*b;
-                sum.z+=shapedirs(idx,i,2)*b;
+                sum.xyz+=shapedirs(idx,i)*b;
             }
             return sum;
         }
@@ -117,9 +111,7 @@ class Renderer {
             float p=0.0;
             for(int i=0;i<36;i++){
                 p=poses(i);
-                sum.x+=posedirs(idx,i,0)*p;
-                sum.y+=posedirs(idx,i,1)*p;
-                sum.z+=posedirs(idx,i,2)*p;
+                sum.xyz+=posedirs(idx,i)*p;
             }
             return sum;
         }
@@ -497,8 +489,8 @@ class Renderer {
     var border = 0;
     var format = gl.RGB;
     var type = gl.FLOAT;
-    var shapedata=new Float32Array(height*width*3);
-    shapedata.set(this.shapedirs.data,0);
+    var shapedata = new Float32Array(height * width * 3);
+    shapedata.set(this.shapedirs.data, 0);
     //console.log(shapedata);
     gl.texImage2D(
       gl.TEXTURE_2D,
@@ -528,8 +520,8 @@ class Renderer {
     var border = 0;
     var format = gl.RGB;
     var type = gl.FLOAT;
-    var posedata=new Float32Array(height*width*3);
-    posedata.set(this.posedirs.data,0);
+    var posedata = new Float32Array(height * width * 3);
+    posedata.set(this.posedirs.data, 0);
     gl.texImage2D(
       gl.TEXTURE_2D,
       level,
@@ -558,9 +550,9 @@ class Renderer {
     var border = 0;
     var format = gl.RED;
     var type = gl.FLOAT;
-    var lbswdata=new Float32Array(height*width);
-    lbswdata.set(this.lbs_weights.data,0);
-    
+    var lbswdata = new Float32Array(height * width);
+    lbswdata.set(this.lbs_weights.data, 0);
+
     gl.texImage2D(
       gl.TEXTURE_2D,
       level,
@@ -1067,5 +1059,5 @@ var m4 = {
 
 export default Renderer;
 var copy = function (arr) {
-    return ndarray(arr.data.slice(), arr.shape);
-}
+  return ndarray(arr.data.slice(), arr.shape);
+};
