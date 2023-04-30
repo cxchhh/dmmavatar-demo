@@ -26,7 +26,7 @@ window.onload = async function () {
 
   var vertices = await loadnpy("mesh_data/meshes_0/vertices.npy");
   var faces = await loadnpyu("mesh_data/meshes_0/faces.npy");
-  var faces_uv = await loadnpy("mesh_data/meshes_0/faces_uv.npy");
+  //var faces_uv = await loadnpy("mesh_data/meshes_0/faces_uv.npy");
   pp.innerHTML += "verts & faces loaded\n";
   var lbs_weights = await loadnpy("mesh_data/meshes_0/lbs_weights.npy");
   var normals = await loadnpy("mesh_data/meshes_0/normals.npy");
