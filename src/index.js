@@ -42,13 +42,13 @@ window.onload = async function () {
     var act0 = await loadnpy("mesh_data/global_mlp/act0_weight.npy");
     var act1 = await loadnpy("mesh_data/global_mlp/act1_weight.npy");
     this.global_mlp = new MLP(fc0_weight, fc0_bias, fc1_weight, fc1_bias, fc2_weight, fc2_bias, act0, act1);
-    this.global_input=new Float32Array(53);
+    this.global_input = new Float32Array(53);
     pp.innerHTML += "MLP loaded\n";
 
     this.betas = zeros([50], "float32");
     this.pose_params = zeros([15], "float32");
     //this.pose_params.set(6,0.2);
-    this.M=2;
+    this.M = 8;
     this.vertices = [], this.faces = [], this.lbs_weights = [], this.normals = [], this.posedirs = [], this.shapedirs = [], this.uvs = [], this.renderers = [];
     for (let i = 0; i < this.M; i++) {
         this.vertices.push(await loadnpy(`mesh_data/meshes_${i}/vertices.npy`));
@@ -69,14 +69,11 @@ window.onload = async function () {
         ));
     }
     pp.innerHTML += "meshes loaded\n";
-    
+
     await forward(this);
     //console.log(show(this.transform));
-    for(let i=0;i<this.M;i++){
+    for (let i = 0; i < this.M; i++) {
         await this.renderers[i].render();
-        this.renderers[i].setBetas(this.betas);
-        this.renderers[i].setPoses(this.poses);
-        this.renderers[i].setTransform(this.transform);
     }
     uiInit(this);
 };
@@ -84,11 +81,11 @@ async function forward(th) {
     var retVal = await th.flame.lbs(th.betas, th.pose_params);
     th.poses = retVal.ret1;
     th.transform = retVal.ret2;
-    th.global_input.set(th.betas.data,0);
-    th.global_input[50]=th.pose_params.data[6];
-    th.global_input[51]=th.pose_params.data[7];
-    th.global_input[52]=th.pose_params.data[8];
-    th.global_output=await th.global_mlp.forward(th.global_input);
+    th.global_input.set(th.betas.data, 0);
+    th.global_input[50] = th.pose_params.data[6];
+    th.global_input[51] = th.pose_params.data[7];
+    th.global_input[52] = th.pose_params.data[8];
+    th.global_output = await th.global_mlp.forward(th.global_input);
     //console.log(this.global_output);
 }
 function uiInit(th) {
@@ -103,25 +100,13 @@ function uiInit(th) {
         min: 1,
         max: 179,
     });
-    webglLessonsUI.setupSlider("#angleX", {
-        value: radToDeg(rotation[0]),
-        slide: updateRotation(0),
-        max: 360,
-    });
-    webglLessonsUI.setupSlider("#angleY", {
-        value: radToDeg(rotation[1]),
-        slide: updateRotation(1),
-        max: 360,
-    });
-    webglLessonsUI.setupSlider("#angleZ", {
-        value: radToDeg(rotation[2]),
-        slide: updateRotation(2),
-        max: 360,
-    });
     webglLessonsUI.setupSlider("#F_num", {
         value: 1,
         slide: updateF(),
+        min: 0,
         max: 1,
+        step: 0.0001,
+        precision: 4
     });
     for (var i = 0; i < 50; i++)
         webglLessonsUI.setupSlider("#exp" + (i + 1), {
@@ -146,42 +131,21 @@ function uiInit(th) {
         return async function (e, ui) {
             th.betas.set(i, ui.value);
             await forward(th);
-            for(let i=0;i<th.M;i++){
-                th.renderers[i].setBetas(th.betas);
-                th.renderers[i].setPoses(th.poses);
-                th.renderers[i].setTransform(th.transform);
-            }
         };
     }
     function updatePoses(i) {
         return async function (e, ui) {
             th.pose_params.set(i, ui.value);
             await forward(th);
-            for(let i=0;i<th.M;i++){
-                th.renderers[i].setBetas(th.betas);
-                th.renderers[i].setPoses(th.poses);
-                th.renderers[i].setTransform(th.transform);
-            }
         };
     }
     function updateFieldOfView(event, ui) {
         fieldOfViewRadians = degToRad(ui.value);
     }
-    function updatePosition(index) {
-        return function (event, ui) {
-            translation[index] = ui.value;
-        };
-    }
-    function updateRotation(index) {
-        return function (event, ui) {
-            var angleInDegrees = ui.value;
-            var angleInRadians = degToRad(angleInDegrees);
-            rotation[index] = angleInRadians;
-        };
-    }
     function updateF() {
         return function (event, ui) {
-            th.F_num = ui.value;
+            for (let i = 0; i < th.M; i++)
+                th.renderers[i].F_num = ui.value;
         };
     }
     th.canvas.addEventListener("contextmenu", function (e) {
@@ -194,34 +158,42 @@ function uiInit(th) {
         basex,
         basey,
         btn = 0;
+    var gaze_t, gaze_f, rotx, roty, lastrotx, lastroty;
     th.canvas.onmouseenter = function (e) {
         incanvas = true;
-        unScroll();
+        disableWindowScroll();
     };
     th.canvas.onmouseleave = function (e) {
         incanvas = false;
         down = false;
-        removeUnScroll();
+        enableWindowScroll();
     };
     th.canvas.onmousedown = function (e) {
         if (!incanvas) return;
         down = true;
-        if (e.button == 0) {
-            btn = 0;
-            lastx = e.clientX;
-            lasty = e.clientY;
+        if (e.button == 2) {
+            btn = 2;
             basex = translation[0];
             basey = translation[1];
-        } else if (e.button == 2) {
-            btn = 2;
+            lastx = e.clientX;
+            lasty = e.clientY;
+        } else if (e.button == 0) {
+            btn = 0;
+            rotx = rotation[0];
+            roty = rotation[1];
+            lastrotx = e.clientY;
+            lastroty = e.clientX;
         }
-        //console.log(e.button);
     };
     th.canvas.onmousemove = function (e) {
         if (!down) return;
-        if (btn == 0) {
+        if (btn == 2) {
             translation[0] = basex + e.clientX - lastx;
             translation[1] = basey - (e.clientY - lasty);
+        }
+        if (btn == 0) {
+            rotation[0] = rotx + (e.clientY - lastrotx) / 250;
+            rotation[1] = roty + (e.clientX - lastroty) / 250;
         }
     };
     th.canvas.onmouseup = function (e) {
@@ -230,27 +202,31 @@ function uiInit(th) {
     };
     th.canvas.onwheel = function (e) {
         if (!incanvas) return;
-        translation[2] += e.wheelDelta;
+        translation[2] += e.wheelDelta / 2;
         if (translation[2] > 1) translation[2] = 1;
         if (translation[2] < -1000) translation[2] = -1000;
         //th.drawScene();
     };
-    //禁用滚动条
-    function unScroll() {
-        var top = $(document).scrollTop();
-        $(document).on("scroll.unable", function (e) {
-            $(document).scrollTop(top);
-        });
+    var winX = null;
+    var winY = null;
+    window.addEventListener('scroll', function () {
+        if (winX !== null && winY !== null) {
+            window.scrollTo(winX, winY);
+        }
+    });
+    function disableWindowScroll() {
+        winX = window.scrollX;
+        winY = window.scrollY;
     }
-    //停止禁用滚动条
-    function removeUnScroll() {
-        $(document).unbind("scroll.unable");
+    function enableWindowScroll() {
+        winX = null;
+        winY = null;
     }
 
     var framwCount = 0;
     var lastTime = performance.now();
     var timeTest = document.getElementById("timeTest");
-    var gl=th.gl;
+    var gl = th.gl;
     async function drawLoop() {
         // Compute the matrix
         var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
@@ -273,14 +249,14 @@ function uiInit(th) {
         view_matrix = m4.xRotate(view_matrix, rotation[0]);
         view_matrix = m4.yRotate(view_matrix, rotation[1]);
         view_matrix = m4.zRotate(view_matrix, rotation[2]);
-        for(let i=0;i<th.M;i++){
+
+        for (let i = 0; i < th.M; i++) {
             th.renderers[i].matrix = m4.multiply(projection_matrix, view_matrix);
             th.renderers[i].normal_matrix = m4.transpose(m4.inverse(view_matrix));
-            th.renderers[i].view_matrix=view_matrix;
-            //if(i==0) 
-            th.renderers[i].drawScene();
+            th.renderers[i].view_matrix = view_matrix;
+            th.renderers[i].drawScene(th.betas, th.poses, th.transform);
         }
-        
+
         framwCount++;
         if (framwCount % 10 == 0) {
             var now = performance.now();

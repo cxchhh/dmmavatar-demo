@@ -29,6 +29,7 @@ class Renderer {
         this.F = faces.shape[0];
         this.J = lbs_weights.shape[1];
         this.T = 6;
+        this.F_num=1.0;
         this.canvas = document.querySelector("#canvas");
         this.gl = this.canvas.getContext("webgl2");
         // Get A WebGL context
@@ -275,23 +276,32 @@ class Renderer {
 
         var height = Math.ceil(this.V / 40);
         var width = 50 * 40;
+        this.betasTexture = gl.createTexture();
+        this.shapedirsTexture = gl.createTexture();
         this.shapedata = new Float32Array(height * width * 3);
         this.shapedata.set(this.shapedirs.data, 0);
         
 
         var height = Math.ceil(this.V / 40);
         var width = 36 * 40;
+        this.posesTexture = gl.createTexture();
+        this.posedirsTexture = gl.createTexture();
         this.posedata = new Float32Array(height * width * 3);
         this.posedata.set(this.posedirs.data, 0);
 
         var height = Math.ceil(this.V / 40);
         var width = this.J * 40;
+        this.transformTexture = gl.createTexture();
+        this.lbsweightTexture = gl.createTexture();
         this.lbswdata = new Float32Array(height * width);
         this.lbswdata.set(this.lbs_weights.data, 0);
         
         //this.uiInit();
     }
-    drawScene() {
+    drawScene(betas,poses,transform) {
+        this.setBetas(betas);
+        this.setPoses(poses);
+        this.setTransform(transform);
         var gl = this.gl;
         if (this.idx == 0) {
             webglUtils.resizeCanvasToDisplaySize(gl.canvas);
@@ -331,17 +341,15 @@ class Renderer {
         // Draw the geometry.
         var primitiveType = gl.TRIANGLES;
         var offset = 0;
-        var count = this.F * 3;
-        //console.log(this.F);
+        var count = Math.floor(this.F * 3*this.F_num);
         gl.drawElements(primitiveType, count, gl.UNSIGNED_INT, offset);
         //gl.drawArrays(gl.TRIANGLES,offset,count);
     }
 
     setBetas(betas) {
         var gl = this.gl;
-        var betasTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 0);
-        gl.bindTexture(gl.TEXTURE_2D, betasTexture);
+        gl.bindTexture(gl.TEXTURE_2D, this.betasTexture);
         var level = 0;
         var internalFormat = gl.R32F;
         var width = 50;
@@ -365,9 +373,8 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        var shapedirsTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 1);
-        gl.bindTexture(gl.TEXTURE_2D, shapedirsTexture);
+        gl.bindTexture(gl.TEXTURE_2D, this.shapedirsTexture);
         var level = 0;
         var internalFormat = gl.RGB32F;
         var height = Math.ceil(this.V / 40);
@@ -393,9 +400,8 @@ class Renderer {
     }
     setPoses(poses) {
         var gl = this.gl;
-        var posesTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 2);
-        gl.bindTexture(gl.TEXTURE_2D, posesTexture);
+        gl.bindTexture(gl.TEXTURE_2D, this.posesTexture);
         var level = 0;
         var internalFormat = gl.R32F;
         var width = 36;
@@ -420,9 +426,8 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        var posedirsTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 3);
-        gl.bindTexture(gl.TEXTURE_2D, posedirsTexture);
+        gl.bindTexture(gl.TEXTURE_2D, this.posedirsTexture);
         var level = 0;
         var internalFormat = gl.RGB32F;
         var height = Math.ceil(this.V / 40);
@@ -448,9 +453,8 @@ class Renderer {
     }
     setTransform(transform) {
         var gl = this.gl;
-        var transformTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 4);
-        gl.bindTexture(gl.TEXTURE_2D, transformTexture);
+        gl.bindTexture(gl.TEXTURE_2D, this.transformTexture);
         var level = 0;
         var internalFormat = gl.R32F;
         var width = 16;
@@ -474,9 +478,9 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        var lbsweightTexture = gl.createTexture();
+        
         gl.activeTexture(gl.TEXTURE0 + 5);
-        gl.bindTexture(gl.TEXTURE_2D, lbsweightTexture);
+        gl.bindTexture(gl.TEXTURE_2D, this.lbsweightTexture);
         var level = 0;
         var internalFormat = gl.R32F;
         var height = Math.ceil(this.V / 40);
