@@ -5,42 +5,36 @@ import zeros from "zeros";
 import { GPU } from "gpu.js";
 import show from "ndarray-show";
 import FLAME from "./flame.js";
+import { cos } from "ndarray-ops";
 
 class Renderer {
-    constructor(
-        flame,
+    constructor(idx,
         vertices,
         faces,
         lbs_weights,
         posedirs,
         shapedirs,
-        betas,
-        pose_params,
         uvs,
         normals
     ) {
-        this.flame = flame;
+        this.idx = idx;
         this.vertices = vertices;
         this.faces = faces;
         this.lbs_weights = lbs_weights;
         this.posedirs = posedirs;
         this.shapedirs = shapedirs;
-        this.betas = betas;
-        this.pose_params = pose_params;
         this.uvs = uvs;
         this.normals = normals;
         this.V = vertices.shape[0];
+        this.F = faces.shape[0];
         this.J = lbs_weights.shape[1];
-        this.gpu = new GPU();
+        this.T = 6;
         this.canvas = document.querySelector("#canvas");
         this.gl = this.canvas.getContext("webgl2");
         // Get A WebGL context
         /** @type {HTMLCanvasElement} */
         var gl = this.gl;
-        if (!gl) {
-            alert("WebGL isn't available on your broswer!");
-            return;
-        }
+
         this.index = new Int32Array(this.V);
         for (var i = 0; i < this.V; i++) {
             this.index[i] = i;
@@ -70,6 +64,7 @@ class Renderer {
         out vec2 v_uv;
         out vec3 v_normal;
         out vec3 v_viewdir;
+        out vec2 v_idx;
         float betas(int i){
             return texelFetch(betasTex,ivec2(i,0),0).x;
         }
@@ -133,10 +128,11 @@ class Renderer {
             apos=lbsMatMul()*apos;
             apos=vec4(apos.xyz*200.0f,1);
             gl_Position = u_matrix * apos;
+
             v_viewdir = normalize((u_view_matrix * apos).xyz);
-            // Pass the color to the fragment shader.
             v_uv=a_uv;
             v_normal=normalize(mat3(u_normal_matrix)*a_normal);
+            v_idx=vec2(fidx,0);
         }`;
         this.fragmentShaderSource = `#version 300 es
             precision highp float;
@@ -146,211 +142,18 @@ class Renderer {
             in vec2 v_uv;
             in vec3 v_normal;
             in vec3 v_viewdir;
+            in vec2 v_idx;
             // we need to declare an output for the fragment shader
             out vec4 outColor;
             void main() {
                 outColor = vec4((v_normal+1.0)/2.0,1);
+                outColor.w=0.5;
                 //outColor = vec4(0,0,0,1);
         }`;
     }
 
-    uiInit() {
-        // First let's make some variables
-        // to hold the translation,
-        this.translation = [0, 0, -360];
-        this.rotation = [0, 0, 0];
-        this.fieldOfViewRadians = degToRad(45);
-        var F = this.faces.shape[0];
-        this.F_num = F * 3;
-        var th = this;
-        webglLessonsUI.setupSlider("#fieldOfView", {
-            value: radToDeg(this.fieldOfViewRadians),
-            slide: updateFieldOfView,
-            min: 1,
-            max: 179,
-        });
-        //webglLessonsUI.setupSlider("#x", { value: this.translation[0], slide: updatePosition(0), min: -200, max: 200 });
-        //webglLessonsUI.setupSlider("#y", { value: this.translation[1], slide: updatePosition(1), min: -200, max: 200 });
-        //webglLessonsUI.setupSlider("#z", { value: this.translation[2], slide: updatePosition(2), min: -1000, max: 0 });
-        webglLessonsUI.setupSlider("#angleX", {
-            value: radToDeg(this.rotation[0]),
-            slide: updateRotation(0),
-            max: 360,
-        });
-        webglLessonsUI.setupSlider("#angleY", {
-            value: radToDeg(this.rotation[1]),
-            slide: updateRotation(1),
-            max: 360,
-        });
-        webglLessonsUI.setupSlider("#angleZ", {
-            value: radToDeg(this.rotation[2]),
-            slide: updateRotation(2),
-            max: 360,
-        });
-        webglLessonsUI.setupSlider("#F_num", {
-            value: this.F_num,
-            slide: updateF(),
-            max: this.F_num,
-        });
-        for (var i = 0; i < 50; i++)
-            webglLessonsUI.setupSlider("#exp" + (i + 1), {
-                value: this.betas.data[i],
-                slide: updateBetas(i),
-                step: 0.001,
-                min: -2,
-                max: 2,
-                precision: 3,
-            });
 
-        for (var i = 0; i < 15; i++)
-            webglLessonsUI.setupSlider("#pose" + (i + 1), {
-                value: this.pose_params.data[i],
-                slide: updatePoses(i),
-                step: 0.001,
-                min: -0.5,
-                max: 0.5,
-                precision: 3,
-            });
-        function updateBetas(i) {
-            return async function (e, ui) {
-                th.betas.set(i, ui.value);
-                await th.forward(th.betas, th.pose_params);
-                th.setBetas();
-                th.setPoses();
-                th.setTransform();
-                ////th.drawScene();
-            };
-        }
-        function updatePoses(i) {
-            return async function (e, ui) {
-                th.pose_params.set(i, ui.value);
-                await th.forward(th.betas, th.pose_params);
-                th.setBetas();
-                th.setPoses();
-                th.setTransform();
-                //th.drawScene();
-            };
-        }
-        function updateFieldOfView(event, ui) {
-            th.fieldOfViewRadians = th.degToRad(ui.value);
-            ////th.drawScene();
-        }
-        function updatePosition(index) {
-            return function (event, ui) {
-                th.translation[index] = ui.value;
-                //th.drawScene();
-            };
-        }
-        function updateRotation(index) {
-            return function (event, ui) {
-                var angleInDegrees = ui.value;
-                var angleInRadians = th.degToRad(angleInDegrees);
-                th.rotation[index] = angleInRadians;
-                //th.drawScene();
-            };
-        }
-        function updateF() {
-            return function (event, ui) {
-                th.F_num = ui.value;
-                //th.drawScene();
-            };
-        }
-        this.canvas.addEventListener("contextmenu", function (e) {
-            e.preventDefault();
-        });
-        var lastx = 0,
-            lasty = 0,
-            incanvas = true,
-            down = false,
-            basex,
-            basey,
-            btn = 0;
-        this.canvas.onmouseenter = function (e) {
-            incanvas = true;
-            unScroll();
-        };
-        this.canvas.onmouseleave = function (e) {
-            incanvas = false;
-            down = false;
-            removeUnScroll();
-        };
-        this.canvas.onmousedown = function (e) {
-            if (!incanvas) return;
-            down = true;
-            if (e.button == 0) {
-                btn = 0;
-                lastx = e.clientX;
-                lasty = e.clientY;
-                basex = th.translation[0];
-                basey = th.translation[1];
-            } else if (e.button == 2) {
-                btn = 2;
-            }
-            //console.log(e.button);
-        };
-        this.canvas.onmousemove = function (e) {
-            if (!down) return;
-            if (btn == 0) {
-                th.translation[0] = basex + e.clientX - lastx;
-                th.translation[1] = basey - (e.clientY - lasty);
-            }
-
-            ////th.drawScene();
-        };
-        this.canvas.onmouseup = function (e) {
-            if (!incanvas) return;
-            down = false;
-        };
-        this.canvas.onwheel = function (e) {
-            if (!incanvas) return;
-            //th.fieldOfViewRadians += e.wheelDelta / 100;
-            //if (th.fieldOfViewRadians < th.degToRad(1)) th.fieldOfViewRadians = th.degToRad(1);
-            //if (th.fieldOfViewRadians > th.degToRad(179)) th.fieldOfViewRadians = th.degToRad(179);
-            //console.log(th.fieldOfViewRadians)
-            th.translation[2] += e.wheelDelta;
-            if (th.translation[2] > 1) th.translation[2] = 1;
-            if (th.translation[2] < -1000) th.translation[2] = -1000;
-            //th.drawScene();
-        };
-        //禁用滚动条
-        function unScroll() {
-            var top = $(document).scrollTop();
-            $(document).on("scroll.unable", function (e) {
-                $(document).scrollTop(top);
-            });
-        }
-        //停止禁用滚动条
-        function removeUnScroll() {
-            $(document).unbind("scroll.unable");
-        }
-
-        var framwCount = 0;
-        var lastTime = performance.now();
-        var timeTest = document.getElementById("timeTest");
-        function drawLoop() {
-            th.drawScene();
-            framwCount++;
-            if (framwCount % 10 == 0) {
-                var now = performance.now();
-                var time = now - lastTime;
-                lastTime = now;
-                timeTest.innerHTML = "FPS:" + (1000 / (time / 10)).toFixed(2);
-            }
-            requestAnimationFrame(drawLoop);
-        }
-        requestAnimationFrame(drawLoop);
-    }
-
-    async forward(betas, pose_params) {
-        var retVal = await this.flame.lbs(betas, pose_params);
-        this.poses = retVal.ret1;
-        this.transform = retVal.ret2;
-    }
-    async render() {
-        var betas = this.betas;
-        var pose_params = this.pose_params;
-
-        await this.forward(betas, pose_params);
+    render() {
         var gl = this.gl;
 
         // Use our boilerplate utils to compile the shaders and link into a program
@@ -470,116 +273,43 @@ class Renderer {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.faces.data, gl.STATIC_DRAW);
 
-        this.setBetas();
-
-        var shapedirsTexture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE0 + 1);
-        gl.bindTexture(gl.TEXTURE_2D, shapedirsTexture);
-        var level = 0;
-        var internalFormat = gl.RGB32F;
-        var height = Math.ceil(this.V / 40); // 80113/40
+        var height = Math.ceil(this.V / 40);
         var width = 50 * 40;
-        var border = 0;
-        var format = gl.RGB;
-        var type = gl.FLOAT;
-        var shapedata = new Float32Array(height * width * 3);
-        shapedata.set(this.shapedirs.data, 0);
-        //console.log(shapedata);
-        gl.texImage2D(
-            gl.TEXTURE_2D,
-            level,
-            internalFormat,
-            width,
-            height,
-            border,
-            format,
-            type,
-            shapedata
-        );
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        this.shapedata = new Float32Array(height * width * 3);
+        this.shapedata.set(this.shapedirs.data, 0);
+        
 
-        this.setPoses();
-
-        var posedirsTexture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE0 + 3);
-        gl.bindTexture(gl.TEXTURE_2D, posedirsTexture);
-        var level = 0;
-        var internalFormat = gl.RGB32F;
-        var height = Math.ceil(this.V / 40); // 80113/40
+        var height = Math.ceil(this.V / 40);
         var width = 36 * 40;
-        var border = 0;
-        var format = gl.RGB;
-        var type = gl.FLOAT;
-        var posedata = new Float32Array(height * width * 3);
-        posedata.set(this.posedirs.data, 0);
-        gl.texImage2D(
-            gl.TEXTURE_2D,
-            level,
-            internalFormat,
-            width,
-            height,
-            border,
-            format,
-            type,
-            posedata
-        );
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        this.posedata = new Float32Array(height * width * 3);
+        this.posedata.set(this.posedirs.data, 0);
 
-        this.setTransform();
-
-        var lbsweightTexture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE0 + 5);
-        gl.bindTexture(gl.TEXTURE_2D, lbsweightTexture);
-        var level = 0;
-        var internalFormat = gl.R32F;
-        var height = Math.ceil(this.V / 40); // 80113/40
+        var height = Math.ceil(this.V / 40);
         var width = this.J * 40;
-        var border = 0;
-        var format = gl.RED;
-        var type = gl.FLOAT;
-        var lbswdata = new Float32Array(height * width);
-        lbswdata.set(this.lbs_weights.data, 0);
-
-        gl.texImage2D(
-            gl.TEXTURE_2D,
-            level,
-            internalFormat,
-            width,
-            height,
-            border,
-            format,
-            type,
-            lbswdata
-        );
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        console.log("start rendering");
-        this.uiInit();
+        this.lbswdata = new Float32Array(height * width);
+        this.lbswdata.set(this.lbs_weights.data, 0);
+        
+        //this.uiInit();
     }
     drawScene() {
         var gl = this.gl;
-        webglUtils.resizeCanvasToDisplaySize(gl.canvas);
-        // Tell WebGL how to convert from clip space to pixels
-        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+        if (this.idx == 0) {
+            webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+            // Tell WebGL how to convert from clip space to pixels
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
-        // Clear the canvas
-        gl.clearColor(0, 0, 0, 0);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            // Clear the canvas
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        // turn on depth testing
-        gl.enable(gl.DEPTH_TEST);
-
-        // tell webgl to cull faces
-        gl.enable(gl.CULL_FACE);
+            // turn on depth testing
+            gl.enable(gl.DEPTH_TEST);
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            // tell webgl to cull faces
+            gl.enable(gl.CULL_FACE);
+            gl.depthMask(false);
+        }
 
         // Tell it to use our program (pair of shaders)
         gl.useProgram(this.program);
@@ -587,37 +317,11 @@ class Renderer {
         // Bind the attribute/buffer set we want.
         gl.bindVertexArray(this.vao);
 
-        // Compute the matrix
-        var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-        var zNear = 1;
-        var zFar = 2000;
-        //var matrix=m4.scaling(1,1,1);
-        var projection_matrix = m4.perspective(
-            this.fieldOfViewRadians,
-            aspect,
-            zNear,
-            zFar
-        );
-        // //console.log(matrix);
-        // //var matrix = m4.projection(gl.canvas.clientWidth, gl.canvas.clientHeight, 400);
 
-        var view_matrix = m4.scaling(1, 1, 1);
-        view_matrix = m4.translate(
-            view_matrix,
-            this.translation[0],
-            this.translation[1],
-            this.translation[2]
-        );
-        view_matrix = m4.xRotate(view_matrix, this.rotation[0]);
-        view_matrix = m4.yRotate(view_matrix, this.rotation[1]);
-        view_matrix = m4.zRotate(view_matrix, this.rotation[2]);
-
-        this.matrix = m4.multiply(projection_matrix, view_matrix);
-        this.normal_matrix = m4.transpose(m4.inverse(view_matrix));
         // Set the matrix.
         gl.uniformMatrix4fv(this.matrixLocation, false, this.matrix);
         gl.uniformMatrix4fv(this.normalMatrixLocation, false, this.normal_matrix);
-        gl.uniformMatrix4fv(this.viewMatrixLocation, false, view_matrix);
+        gl.uniformMatrix4fv(this.viewMatrixLocation, false, this.view_matrix);
         gl.uniform1i(this.betasLocation, 0);
         gl.uniform1i(this.shapedirsLocation, 1);
         gl.uniform1i(this.posesLocation, 2);
@@ -627,12 +331,13 @@ class Renderer {
         // Draw the geometry.
         var primitiveType = gl.TRIANGLES;
         var offset = 0;
-        var count = this.F_num;
+        var count = this.F * 3;
+        //console.log(this.F);
         gl.drawElements(primitiveType, count, gl.UNSIGNED_INT, offset);
         //gl.drawArrays(gl.TRIANGLES,offset,count);
     }
 
-    setBetas() {
+    setBetas(betas) {
         var gl = this.gl;
         var betasTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 0);
@@ -644,8 +349,6 @@ class Renderer {
         var border = 0;
         var format = gl.RED;
         var type = gl.FLOAT;
-        //console.log(betas);
-        //gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
         gl.texImage2D(
             gl.TEXTURE_2D,
             level,
@@ -655,14 +358,40 @@ class Renderer {
             border,
             format,
             type,
-            this.betas.data
+            betas.data
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        var shapedirsTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + 1);
+        gl.bindTexture(gl.TEXTURE_2D, shapedirsTexture);
+        var level = 0;
+        var internalFormat = gl.RGB32F;
+        var height = Math.ceil(this.V / 40);
+        var width = 50 * 40;
+        var border = 0;
+        var format = gl.RGB;
+        var type = gl.FLOAT;
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            level,
+            internalFormat,
+            width,
+            height,
+            border,
+            format,
+            type,
+            this.shapedata
         );
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     }
-    setPoses() {
+    setPoses(poses) {
         var gl = this.gl;
         var posesTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 2);
@@ -684,14 +413,40 @@ class Renderer {
             border,
             format,
             type,
-            this.poses.data
+            poses.data
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        var posedirsTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + 3);
+        gl.bindTexture(gl.TEXTURE_2D, posedirsTexture);
+        var level = 0;
+        var internalFormat = gl.RGB32F;
+        var height = Math.ceil(this.V / 40);
+        var width = 36 * 40;
+        var border = 0;
+        var format = gl.RGB;
+        var type = gl.FLOAT;
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            level,
+            internalFormat,
+            width,
+            height,
+            border,
+            format,
+            type,
+            this.posedata
         );
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     }
-    setTransform() {
+    setTransform(transform) {
         var gl = this.gl;
         var transformTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0 + 4);
@@ -699,7 +454,7 @@ class Renderer {
         var level = 0;
         var internalFormat = gl.R32F;
         var width = 16;
-        var height = 5;
+        var height = this.J;
         var border = 0;
         var format = gl.RED;
         var type = gl.FLOAT;
@@ -712,7 +467,33 @@ class Renderer {
             border,
             format,
             type,
-            this.transform.data
+            transform.data
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        var lbsweightTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + 5);
+        gl.bindTexture(gl.TEXTURE_2D, lbsweightTexture);
+        var level = 0;
+        var internalFormat = gl.R32F;
+        var height = Math.ceil(this.V / 40);
+        var width = this.J * 40;
+        var border = 0;
+        var format = gl.RED;
+        var type = gl.FLOAT;
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            level,
+            internalFormat,
+            width,
+            height,
+            border,
+            format,
+            type,
+            this.lbswdata
         );
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);

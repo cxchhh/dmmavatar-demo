@@ -192,6 +192,19 @@ class FLAME {
         }
         ops.sub(rel_transforms, transform_chain, rel_transforms);
 
+        var ghost_bone=1;
+        if(ghost_bone){
+            var nd=new Float32Array((N+1)*16);
+            nd.set(new Float32Array([
+                1,0,0,0,
+                0,1,0,0,
+                0,0,1,0,
+                0,0,0,1
+            ]),0);
+            nd.set(rel_transforms.data,16);
+            rel_transforms=ndarray(nd,[N+1,4,4]);
+        }
+        
         return rel_transforms;
     }
 }
