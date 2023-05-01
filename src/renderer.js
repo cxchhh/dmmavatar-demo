@@ -8,15 +8,7 @@ import FLAME from "./flame.js";
 import { cos } from "ndarray-ops";
 
 class Renderer {
-    constructor(idx,
-        vertices,
-        faces,
-        lbs_weights,
-        posedirs,
-        shapedirs,
-        uvs,
-        normals
-    ) {
+    constructor(idx, vertices, faces, lbs_weights, posedirs, shapedirs, uvs, normals) {
         this.idx = idx;
         this.vertices = vertices;
         this.faces = faces;
@@ -29,7 +21,7 @@ class Renderer {
         this.F = faces.shape[0];
         this.J = lbs_weights.shape[1];
         this.T = 6;
-        this.F_num=1.0;
+        this.F_num = 1.0;
         this.canvas = document.querySelector("#canvas");
         this.gl = this.canvas.getContext("webgl2");
         // Get A WebGL context
@@ -153,7 +145,6 @@ class Renderer {
         }`;
     }
 
-
     render() {
         var gl = this.gl;
 
@@ -176,10 +167,7 @@ class Renderer {
         var normalsAttributeLocation = gl.getAttribLocation(program, "a_normal");
         // look up uniform locations
         this.matrixLocation = gl.getUniformLocation(program, "u_matrix");
-        this.normalMatrixLocation = gl.getUniformLocation(
-            program,
-            "u_normal_matrix"
-        );
+        this.normalMatrixLocation = gl.getUniformLocation(program, "u_normal_matrix");
         this.viewMatrixLocation = gl.getUniformLocation(program, "u_view_matrix");
 
         // Create a buffer
@@ -206,14 +194,7 @@ class Renderer {
         var normalize = false; // don't normalize the data
         var stride = 0; // 0 = move forward size * sizeof(type) each iteration to get the next position
         var offset = 0; // start at the beginning of the buffer
-        gl.vertexAttribPointer(
-            positionAttributeLocation,
-            size,
-            type,
-            normalize,
-            stride,
-            offset
-        );
+        gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
 
         var vindexBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, vindexBuffer);
@@ -224,14 +205,7 @@ class Renderer {
         var normalize = false;
         var stride = 0;
         var offset = 0;
-        gl.vertexAttribPointer(
-            indexAttributeLocation,
-            size,
-            type,
-            normalize,
-            stride,
-            offset
-        );
+        gl.vertexAttribPointer(indexAttributeLocation, size, type, normalize, stride, offset);
 
         var uvsBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, uvsBuffer);
@@ -243,14 +217,7 @@ class Renderer {
         var stride = 0;
         var offset = 0;
         //console.log(this.uvs);
-        gl.vertexAttribPointer(
-            uvsAttributeLocation,
-            size,
-            type,
-            normalize,
-            stride,
-            offset
-        );
+        gl.vertexAttribPointer(uvsAttributeLocation, size, type, normalize, stride, offset);
 
         var normalsBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, normalsBuffer);
@@ -261,14 +228,7 @@ class Renderer {
         var normalize = false;
         var stride = 0;
         var offset = 0;
-        gl.vertexAttribPointer(
-            normalsAttributeLocation,
-            size,
-            type,
-            normalize,
-            stride,
-            offset
-        );
+        gl.vertexAttribPointer(normalsAttributeLocation, size, type, normalize, stride, offset);
 
         var indexBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
@@ -280,7 +240,6 @@ class Renderer {
         this.shapedirsTexture = gl.createTexture();
         this.shapedata = new Float32Array(height * width * 3);
         this.shapedata.set(this.shapedirs.data, 0);
-        
 
         var height = Math.ceil(this.V / 40);
         var width = 36 * 40;
@@ -295,10 +254,11 @@ class Renderer {
         this.lbsweightTexture = gl.createTexture();
         this.lbswdata = new Float32Array(height * width);
         this.lbswdata.set(this.lbs_weights.data, 0);
-        
+
         //this.uiInit();
     }
-    drawScene(betas,poses,transform) {
+
+    drawScene(betas, poses, transform) {
         this.setBetas(betas);
         this.setPoses(poses);
         this.setTransform(transform);
@@ -316,7 +276,7 @@ class Renderer {
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
             // tell webgl to cull faces
             gl.enable(gl.CULL_FACE);
-            gl.depthMask(false);
+            gl.depthMask(true);
         }
         // Tell it to use our program (pair of shaders)
         gl.useProgram(this.program);
@@ -335,9 +295,8 @@ class Renderer {
         // Draw the geometry.
         var primitiveType = gl.TRIANGLES;
         var offset = 0;
-        var count = Math.floor(this.F * 3*this.F_num);
+        var count = Math.floor(this.F * 3 * this.F_num);
         gl.drawElements(primitiveType, count, gl.UNSIGNED_INT, offset);
-        //gl.drawArrays(gl.TRIANGLES,offset,count);
     }
 
     setBetas(betas) {
@@ -392,6 +351,7 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     }
+
     setPoses(poses) {
         var gl = this.gl;
         gl.activeTexture(gl.TEXTURE0 + 2);
@@ -445,6 +405,7 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     }
+
     setTransform(transform) {
         var gl = this.gl;
         gl.activeTexture(gl.TEXTURE0 + 4);
@@ -499,9 +460,4 @@ class Renderer {
     }
 }
 
-
-
 export default Renderer;
-var copy = function (arr) {
-    return ndarray(arr.data.slice(), arr.shape);
-};
