@@ -135,6 +135,7 @@ window.onload = async function () {
             )
         );
     }
+    this.max_M = this.M;
     pp.innerHTML += "meshes loaded\n";
     await forward(this);
     //console.log(show(this.transform));
@@ -158,10 +159,17 @@ async function forward(th) {
 }
 
 function uiInit(th) {
-    // First let's make some variables
-    // to hold the translation,
-    var translation = [0, 0, -360];
+    var translation = [0, 0, -960];
     var rotation = [0, 0, 0];
+    webglLessonsUI.setupSlider("#M_num", {
+        value: th.M,
+        slide: function (event, ui) {
+            th.max_M = Math.round(ui.value);
+        },
+        min: 0,
+        max: th.M,
+        step: 1,
+    });
     webglLessonsUI.setupSlider("#F_num", {
         value: 1,
         slide: updateF(),
@@ -262,7 +270,7 @@ function uiInit(th) {
         if (!incanvas) return;
         translation[2] += e.wheelDelta / 2;
         if (translation[2] > 1) translation[2] = 1;
-        if (translation[2] < -1000) translation[2] = -1000;
+        if (translation[2] < -2000) translation[2] = -2000;
     };
     var winX = null;
     var winY = null;
@@ -290,19 +298,19 @@ function uiInit(th) {
         var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
         var zNear = 0.1;
         var zFar = 100;
-        var projection_matrix = m4.perspective(degToRad(10), aspect, zNear, zFar);
+        var projection_matrix = m4.perspective(degToRad(14), aspect, zNear, zFar);
         var view_matrix = m4.scaling(1, 1, 1);
         view_matrix = m4.translate(
             view_matrix,
-            translation[0] / 50,
-            translation[1] / 50,
-            translation[2] / 50
+            translation[0] / 200,
+            translation[1] / 200,
+            translation[2] / 200
         );
         view_matrix = m4.xRotate(view_matrix, rotation[0]);
         view_matrix = m4.yRotate(view_matrix, rotation[1]);
         view_matrix = m4.zRotate(view_matrix, rotation[2]);
 
-        for (let i = 0; i < th.M; i++) {
+        for (let i = 0; i < Math.min(th.M, th.max_M); i++) {
             th.renderers[i].matrix = m4.multiply(projection_matrix, view_matrix);
             th.renderers[i].normal_matrix = m4.transpose(m4.inverse(view_matrix));
             th.renderers[i].view_matrix = view_matrix;
