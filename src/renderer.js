@@ -1,12 +1,5 @@
 "use strict";
-import ndarray from "ndarray";
-import cwise from "cwise";
-import zeros from "zeros";
-import show from "ndarray-show";
-import concatRows from "ndarray-concat-rows"
 import { getFragmentShaderSource, getVertexShaderSource } from "./shaders.js";
-import { reshape_ } from "./ndutils.js";
-import concatColumns from "ndarray-concat-cols";
 
 class Renderer {
     constructor(idx, vertices, faces, lbs_weights, posedirs, shapedirs, uvs, normals, pos_feature, tex) {
@@ -55,7 +48,7 @@ class Renderer {
             gl.enable(gl.CULL_FACE);
         }
         else{
-            gl.depthMask(false);
+            gl.depthMask(true);
         }
         // Tell it to use our program (pair of shaders)
         gl.useProgram(this.program);
@@ -221,8 +214,8 @@ class Renderer {
             type,
             this.pos_feature.data
         );
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         
@@ -235,8 +228,8 @@ class Renderer {
         var format = gl.RGBA;
         var type = gl.UNSIGNED_BYTE;
         gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, 4096, 2048, 0, format, type, this.tex.data);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 

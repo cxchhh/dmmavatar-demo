@@ -69,10 +69,37 @@ window.onload = async function () {
     pp.innerHTML += "MLP loaded\n";
 
     this.betas = zeros([50], "float32");
+    this.betas = ndarray(
+        new Float32Array([
+            -0.7734001874923706, 0.47500404715538025, -0.2207159399986267, 0.4112471044063568,
+            -0.7225434184074402, 0.7391737103462219, 0.048007089644670486, -0.17434833943843842,
+            -0.03906625136733055, 0.6934881210327148, -0.04477059468626976, -0.3222707509994507,
+            -0.4588749408721924, 0.7728955745697021, 0.11826960742473602, 0.10405569523572922,
+            -0.3743153512477875, -0.1533493995666504, 0.10482098162174225, 0.23136195540428162,
+            -0.14709198474884033, -0.17408138513565063, 0.15598450601100922, -0.3476805090904236,
+            -0.1309555321931839, -0.06102199852466583, 0.1289907991886139, 0.03520803898572922,
+            -0.1652863621711731, -0.22350919246673584, -0.2152254283428192, -0.00794155988842249,
+            0.17952083051204681, -0.08767711371183395, -0.05959964171051979, -0.07291064411401749,
+            0.10973446816205978, -0.15915675461292267, 0.042276158928871155, -0.007540557067841291,
+            -0.10525673627853394, 0.0052323173731565475, -0.026331013068556786, 0.00783122144639492,
+            -0.12349570542573929, -0.10160142928361893, -0.08464774489402771, 0.09305692464113235,
+            -0.029000310227274895, 0.026307053864002228,
+        ]),
+        [50]
+    );
     this.pose_params = zeros([15], "float32");
+    this.pose_params = ndarray(
+        new Float32Array([
+            0.12880776822566986, -0.0023364718072116375, -0.042034655809402466,
+            -0.10783462971448898, -0.015666034072637558, 0.002099345438182354, 0.012164629995822906,
+            0.012352745980024338, -0.012653038837015629, -0.06936541199684143, -0.10923106968402863,
+            0.009163151495158672, -0.06980134546756744, 0.23808681964874268, 0.00034914835123345256,
+        ]),
+        [15]
+    );
     //this.pose_params.set(6,0.2);
     this.M = 8;
-    this.I=8;
+    this.I = 8;
     this.vertices = [];
     this.faces = [];
     this.lbs_weights = [];
@@ -82,7 +109,7 @@ window.onload = async function () {
     this.uvs = [];
     this.renderers = [];
     this.pos_feature = [];
-    this.tex=[];
+    this.tex = [];
     for (let i = 0; i < this.M; i++) {
         this.vertices.push(await loadnpy(`mesh_data/meshes_${i}/vertices.npy`));
         this.faces.push(await loadnpyu(`mesh_data/meshes_${i}/faces.npy`));
@@ -124,9 +151,9 @@ async function forward(th) {
     th.global_input[50] = th.pose_params.data[6];
     th.global_input[51] = th.pose_params.data[7];
     th.global_input[52] = th.pose_params.data[8];
-    retVal= await th.global_mlp.forward(th.global_input);
-    th.sfc0=retVal.ret1;
-    th.sfc1=retVal.ret2;
+    retVal = await th.global_mlp.forward(th.global_input);
+    th.sfc0 = retVal.ret1;
+    th.sfc1 = retVal.ret2;
     //console.log(th.sfc0,th.sfc1);
 }
 
@@ -271,12 +298,17 @@ function uiInit(th) {
     async function drawLoop() {
         // Compute the matrix
         var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-        var zNear = 1;
-        var zFar = 2000;
+        var zNear = 0.1;
+        var zFar = 100;
         //var matrix=m4.scaling(1,1,1);
         var projection_matrix = m4.perspective(fieldOfViewRadians, aspect, zNear, zFar);
         var view_matrix = m4.scaling(1, 1, 1);
-        view_matrix = m4.translate(view_matrix, translation[0], translation[1], translation[2]);
+        view_matrix = m4.translate(
+            view_matrix,
+            translation[0] / 200,
+            translation[1] / 200,
+            translation[2] / 200
+        );
         view_matrix = m4.xRotate(view_matrix, rotation[0]);
         view_matrix = m4.yRotate(view_matrix, rotation[1]);
         view_matrix = m4.zRotate(view_matrix, rotation[2]);
