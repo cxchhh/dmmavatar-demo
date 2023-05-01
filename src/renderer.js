@@ -44,7 +44,7 @@ class Renderer {
             // Tell WebGL how to convert from clip space to pixels
             gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
             // Clear the canvas
-            gl.clearColor(0, 0, 0, 1);
+            gl.clearColor(1, 1, 1, 1);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             // turn on depth testing
             gl.enable(gl.DEPTH_TEST);
@@ -53,7 +53,9 @@ class Renderer {
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
             // tell webgl to cull faces
             gl.enable(gl.CULL_FACE);
-            
+        }
+        else{
+            gl.depthMask(false);
         }
         // Tell it to use our program (pair of shaders)
         gl.useProgram(this.program);
@@ -128,7 +130,6 @@ class Renderer {
         // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
         gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
         // Set Geometry.
-        //console.log(this.vertices.data);
         gl.bufferData(gl.ARRAY_BUFFER, this.vertices.data, gl.STATIC_DRAW);
 
         // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
@@ -330,6 +331,7 @@ class Renderer {
         var border = 0;
         var format = gl.RED;
         var type = gl.FLOAT;
+        //global.sfc0[0]=1.0;
         gl.texImage2D(
             gl.TEXTURE_2D,
             level,
@@ -339,7 +341,7 @@ class Renderer {
             border,
             format,
             type,
-            global.sfc0.data
+            global.sfc0
         );
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -364,7 +366,7 @@ class Renderer {
             border,
             format,
             type,
-            global.sfc1.data
+            global.sfc1
         );
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);

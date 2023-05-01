@@ -105,17 +105,51 @@ export function getFragmentShaderSource() {
     uniform sampler2D sfc0Tex;
     uniform sampler2D sfc1Tex;
     uniform sampler2D imgTex;
+    float out1[16],coef[8];
+    float sfc0(int i,int j){
+        return texelFetch(sfc0Tex,ivec2(j,i),0).x;
+    }
+    float sfc1(int i,int j){
+        return texelFetch(sfc1Tex,ivec2(j,i),0).x;
+    }
     // we need to declare an output for the fragment shader
     out vec4 outColor;
-    
     void main() {
         v_posf0=texture(pos_featureTex,vec2(v_uv.x/2.0,v_uv.y));
         v_posf1=texture(pos_featureTex,vec2(v_uv.x/2.0+0.5,v_uv.y));
-        //outColor = vec4((v_normal+1.0)/2.0,0.8);
-        vec4 sumColor=vec4(0,0,0,0);
-        for(int i=0;i<8;i++){
-            sumColor+=0.125*texture(imgTex,vec2(v_uv.x/4.0+0.25*float(i&3),v_uv.y/2.0+0.5*float(i>>2)));
+        for(int i=0;i<16;i++){
+            out1[i]=0.0;
+            out1[i]+=dot(vec4(sfc0(i,0),sfc0(i,1),sfc0(i,2),sfc0(i,3)),v_posf0);
+            out1[i]+=dot(vec4(sfc0(i,4),sfc0(i,5),sfc0(i,6),sfc0(i,7)),v_posf1);
+            out1[i]+=dot(vec3(sfc0(i,8),sfc0(i,9),sfc0(i,10)),v_normal);
+            out1[i]+=dot(vec3(sfc0(i,11),sfc0(i,12),sfc0(i,13)),v_viewdir);
+            out1[i]=max(out1[i],0.0);
         }
+        float esum=0.0;
+        for(int i=0;i<8;i++){
+            coef[i]=0.0;
+            for(int j=0;j<16;j++){
+                coef[i]+=sfc1(i,j)*out1[j];
+            }
+            coef[i]=exp(10.0*coef[i]);
+            esum+=coef[i];
+        }
+        //outColor = vec4((v_normal+1.0)/2.0,0.8);
+        vec4 sumColor=vec4(0,0,0,0),tmpColor;
+        for(int i=0;i<8;i++){
+            coef[i]/=esum;
+            tmpColor=texture(imgTex,vec2(v_uv.x/4.0+0.25*float(i&3),v_uv.y/2.0+0.5*float(i>>2)));
+            sumColor+=tmpColor*coef[i];
+        }
+        vec4 c0=vec4(0.12156862745098039, 0.4666666666666667, 0.7058823529411765,1);
+        vec4 c1=vec4(1.0, 0.4980392156862745, 0.054901960784313725,1);
+        vec4 c2=vec4(0.17254901960784313, 0.6274509803921569, 0.17254901960784313,1);
+        vec4 c3=vec4(0.8392156862745098, 0.15294117647058825, 0.1568627450980392,1); 
+        vec4 c4=vec4(0.5803921568627451, 0.403921568627451, 0.7411764705882353,1); 
+        vec4 c5=vec4(0.5490196078431373, 0.33725490196078434, 0.29411764705882354,1);
+        vec4 c6=vec4(0.8901960784313725, 0.4666666666666667, 0.7607843137254902,1);
+        vec4 c7=vec4(0.4980392156862745, 0.4980392156862745, 0.4980392156862745,1);
+        //outColor=c0*coef[0]+c1*coef[1]+c2*coef[2]+c3*coef[3]+c4*coef[4]+c5*coef[5]+c6*coef[6]+c7*coef[7];
         outColor=sumColor;
         //outColor.w=1.0;
     }`;
