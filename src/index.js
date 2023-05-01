@@ -162,13 +162,6 @@ function uiInit(th) {
     // to hold the translation,
     var translation = [0, 0, -360];
     var rotation = [0, 0, 0];
-    var fieldOfViewRadians = degToRad(45);
-    webglLessonsUI.setupSlider("#fieldOfView", {
-        value: radToDeg(fieldOfViewRadians),
-        slide: updateFieldOfView,
-        min: 1,
-        max: 179,
-    });
     webglLessonsUI.setupSlider("#F_num", {
         value: 1,
         slide: updateF(),
@@ -208,9 +201,6 @@ function uiInit(th) {
             await forward(th);
         };
     }
-    function updateFieldOfView(event, ui) {
-        fieldOfViewRadians = degToRad(ui.value);
-    }
     function updateF() {
         return function (event, ui) {
             for (let i = 0; i < th.M; i++) th.renderers[i].F_num = ui.value;
@@ -226,7 +216,7 @@ function uiInit(th) {
         basex,
         basey,
         btn = 0;
-    var gaze_t, gaze_f, rotx, roty, lastrotx, lastroty;
+    var rotx, roty, lastrotx, lastroty;
     th.canvas.onmouseenter = function (e) {
         incanvas = true;
         disableWindowScroll();
@@ -300,14 +290,13 @@ function uiInit(th) {
         var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
         var zNear = 0.1;
         var zFar = 100;
-        //var matrix=m4.scaling(1,1,1);
-        var projection_matrix = m4.perspective(fieldOfViewRadians, aspect, zNear, zFar);
+        var projection_matrix = m4.perspective(degToRad(10), aspect, zNear, zFar);
         var view_matrix = m4.scaling(1, 1, 1);
         view_matrix = m4.translate(
             view_matrix,
-            translation[0] / 200,
-            translation[1] / 200,
-            translation[2] / 200
+            translation[0] / 50,
+            translation[1] / 50,
+            translation[2] / 50
         );
         view_matrix = m4.xRotate(view_matrix, rotation[0]);
         view_matrix = m4.yRotate(view_matrix, rotation[1]);
