@@ -73,7 +73,7 @@ window.onload = async function () {
     await forward(this);
     //console.log(show(this.transform));
     for (let i = 0; i < this.M; i++) {
-        await this.renderers[i].render();
+        await this.renderers[i].setStatics();
     }
     uiInit(this);
 };
@@ -205,7 +205,6 @@ function uiInit(th) {
         translation[2] += e.wheelDelta / 2;
         if (translation[2] > 1) translation[2] = 1;
         if (translation[2] < -1000) translation[2] = -1000;
-        //th.drawScene();
     };
     var winX = null;
     var winY = null;
@@ -254,7 +253,7 @@ function uiInit(th) {
             th.renderers[i].matrix = m4.multiply(projection_matrix, view_matrix);
             th.renderers[i].normal_matrix = m4.transpose(m4.inverse(view_matrix));
             th.renderers[i].view_matrix = view_matrix;
-            th.renderers[i].drawScene(th.betas, th.poses, th.transform);
+            th.renderers[i].render(th.betas, th.poses, th.transform);
         }
 
         framwCount++;
