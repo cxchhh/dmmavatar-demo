@@ -6,15 +6,7 @@ import show from "ndarray-show";
 import { getFragmentShaderSource, getVertexShaderSource } from "./shaders.js";
 
 class Renderer {
-    constructor(idx,
-        vertices,
-        faces,
-        lbs_weights,
-        posedirs,
-        shapedirs,
-        uvs,
-        normals
-    ) {
+    constructor(idx, vertices, faces, lbs_weights, posedirs, shapedirs, uvs, normals) {
         this.idx = idx;
         this.vertices = vertices;
         this.faces = faces;
@@ -27,7 +19,7 @@ class Renderer {
         this.F = faces.shape[0];
         this.J = lbs_weights.shape[1];
         this.T = 6;
-        this.F_num=1.0;
+        this.F_num = 1.0;
         this.canvas = document.querySelector("#canvas");
         this.gl = this.canvas.getContext("webgl2");
         this.index = new Int32Array(this.V);
@@ -99,10 +91,7 @@ class Renderer {
         var normalsAttributeLocation = gl.getAttribLocation(program, "a_normal");
         // look up uniform locations
         this.matrixLocation = gl.getUniformLocation(program, "u_matrix");
-        this.normalMatrixLocation = gl.getUniformLocation(
-            program,
-            "u_normal_matrix"
-        );
+        this.normalMatrixLocation = gl.getUniformLocation(program, "u_normal_matrix");
         this.viewMatrixLocation = gl.getUniformLocation(program, "u_view_matrix");
 
         // Create a buffer
@@ -129,14 +118,7 @@ class Renderer {
         var normalize = false; // don't normalize the data
         var stride = 0; // 0 = move forward size * sizeof(type) each iteration to get the next position
         var offset = 0; // start at the beginning of the buffer
-        gl.vertexAttribPointer(
-            positionAttributeLocation,
-            size,
-            type,
-            normalize,
-            stride,
-            offset
-        );
+        gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
 
         var vindexBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, vindexBuffer);
@@ -147,14 +129,7 @@ class Renderer {
         var normalize = false;
         var stride = 0;
         var offset = 0;
-        gl.vertexAttribPointer(
-            indexAttributeLocation,
-            size,
-            type,
-            normalize,
-            stride,
-            offset
-        );
+        gl.vertexAttribPointer(indexAttributeLocation, size, type, normalize, stride, offset);
 
         var uvsBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, uvsBuffer);
@@ -166,14 +141,7 @@ class Renderer {
         var stride = 0;
         var offset = 0;
         //console.log(this.uvs);
-        gl.vertexAttribPointer(
-            uvsAttributeLocation,
-            size,
-            type,
-            normalize,
-            stride,
-            offset
-        );
+        gl.vertexAttribPointer(uvsAttributeLocation, size, type, normalize, stride, offset);
 
         var normalsBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, normalsBuffer);
@@ -184,14 +152,7 @@ class Renderer {
         var normalize = false;
         var stride = 0;
         var offset = 0;
-        gl.vertexAttribPointer(
-            normalsAttributeLocation,
-            size,
-            type,
-            normalize,
-            stride,
-            offset
-        );
+        gl.vertexAttribPointer(normalsAttributeLocation, size, type, normalize, stride, offset);
 
         var indexBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
@@ -269,7 +230,6 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
         gl.activeTexture(gl.TEXTURE0 + 2);
         gl.bindTexture(gl.TEXTURE_2D, this.posesTexture);
         var level = 0;
@@ -320,7 +280,6 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
         gl.activeTexture(gl.TEXTURE0 + 4);
         gl.bindTexture(gl.TEXTURE_2D, this.transformTexture);
         var level = 0;
@@ -373,6 +332,3 @@ class Renderer {
     }
 }
 export default Renderer;
-var copy = function (arr) {
-    return ndarray(arr.data.slice(), arr.shape);
-};
