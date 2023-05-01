@@ -14,12 +14,10 @@ export function getVertexShaderSource(J) {
     uniform sampler2D posedirsTex;
     uniform sampler2D transformTex;
     uniform sampler2D lbsweightTex;
-    // A matrix to transform the positions by
     uniform mat4 u_matrix;
     uniform mat4 u_normal_matrix;
     uniform mat4 u_view_matrix;
-    // a varying the color to the fragment shader
-    //out vec4 v_color;
+
     out vec2 v_uv;
     out vec3 v_normal;
     out vec3 v_viewdir;
@@ -87,7 +85,7 @@ export function getVertexShaderSource(J) {
         apos=lbsMatMul()*apos;
         apos=vec4(apos.xyz*200.0f,1);
         gl_Position = u_matrix * apos;
-
+        
         v_viewdir = normalize((u_view_matrix * apos).xyz);
         v_uv=a_uv;
         v_normal=normalize(mat3(u_normal_matrix)*a_normal);
@@ -98,17 +96,27 @@ export function getVertexShaderSource(J) {
 export function getFragmentShaderSource() {
     return `#version 300 es
     precision highp float;
-
-    // the varied color passed from the vertex shader
-    //in vec4 v_color;
     in vec2 v_uv;
     in vec3 v_normal;
     in vec3 v_viewdir;
     in vec2 v_idx;
+    vec4 v_posf0,v_posf1;
+    uniform sampler2D pos_featureTex;
+    uniform sampler2D sfc0Tex;
+    uniform sampler2D sfc1Tex;
+    uniform sampler2D imgTex;
     // we need to declare an output for the fragment shader
     out vec4 outColor;
+    
     void main() {
-        outColor = vec4((v_normal+1.0)/2.0,1);
-        outColor.w=0.8;
+        v_posf0=texture(pos_featureTex,vec2(v_uv.x/2.0,v_uv.y));
+        v_posf1=texture(pos_featureTex,vec2(v_uv.x/2.0+0.5,v_uv.y));
+        //outColor = vec4((v_normal+1.0)/2.0,0.8);
+        vec4 sumColor=vec4(0,0,0,0);
+        for(int i=0;i<8;i++){
+            sumColor+=0.125*texture(imgTex,vec2(v_uv.x/4.0+0.25*float(i&3),v_uv.y/2.0+0.5*float(i>>2)));
+        }
+        outColor=sumColor;
+        //outColor.w=1.0;
     }`;
 }

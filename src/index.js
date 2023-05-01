@@ -14,12 +14,14 @@ async function loadnpy(url) {
     var npy = await n.load(url);
     return ndarray(new Float32Array(npy.data), npy.shape);
 }
-
 async function loadnpyu(url) {
     var npy = await n.load(url);
     return ndarray(new Uint32Array(npy.data), npy.shape);
 }
-
+async function loadnpyu8(url) {
+    var npy = await n.load(url);
+    return ndarray(new Uint8Array(npy.data), npy.shape);
+}
 function radToDeg(r) {
     return (r * 180) / Math.PI;
 }
@@ -70,6 +72,7 @@ window.onload = async function () {
     this.pose_params = zeros([15], "float32");
     //this.pose_params.set(6,0.2);
     this.M = 8;
+    this.I=8;
     this.vertices = [];
     this.faces = [];
     this.lbs_weights = [];
@@ -78,6 +81,8 @@ window.onload = async function () {
     this.shapedirs = [];
     this.uvs = [];
     this.renderers = [];
+    this.pos_feature = [];
+    this.tex=[];
     for (let i = 0; i < this.M; i++) {
         this.vertices.push(await loadnpy(`mesh_data/meshes_${i}/vertices.npy`));
         this.faces.push(await loadnpyu(`mesh_data/meshes_${i}/faces.npy`));
@@ -86,6 +91,8 @@ window.onload = async function () {
         this.posedirs.push(await loadnpy(`mesh_data/meshes_${i}/posedirs.npy`));
         this.shapedirs.push(await loadnpy(`mesh_data/meshes_${i}/shapedirs.npy`));
         this.uvs.push(await loadnpy(`mesh_data/meshes_${i}/uvs.npy`));
+        this.pos_feature.push(await loadnpyu8(`mesh_data/meshes_${i}/position_texture.npy`));
+        this.tex.push(await loadnpyu8(`mesh_data/meshes_${i}/radiance_texture.npy`));
         this.renderers.push(
             new Renderer(
                 i,
@@ -95,12 +102,13 @@ window.onload = async function () {
                 this.posedirs[i],
                 this.shapedirs[i],
                 this.uvs[i],
-                this.normals[i]
+                this.normals[i],
+                this.pos_feature[i],
+                this.tex[i]
             )
         );
     }
     pp.innerHTML += "meshes loaded\n";
-
     await forward(this);
     //console.log(show(this.transform));
     for (let i = 0; i < this.M; i++) {
@@ -116,8 +124,10 @@ async function forward(th) {
     th.global_input[50] = th.pose_params.data[6];
     th.global_input[51] = th.pose_params.data[7];
     th.global_input[52] = th.pose_params.data[8];
-    th.global_output = await th.global_mlp.forward(th.global_input);
-    //console.log(this.global_output);
+    retVal= await th.global_mlp.forward(th.global_input);
+    th.sfc0=retVal.ret1;
+    th.sfc1=retVal.ret2;
+    //console.log(th.sfc0,th.sfc1);
 }
 
 function uiInit(th) {
@@ -275,7 +285,7 @@ function uiInit(th) {
             th.renderers[i].matrix = m4.multiply(projection_matrix, view_matrix);
             th.renderers[i].normal_matrix = m4.transpose(m4.inverse(view_matrix));
             th.renderers[i].view_matrix = view_matrix;
-            th.renderers[i].render(th.betas, th.poses, th.transform);
+            th.renderers[i].render(th);
         }
 
         framwCount++;

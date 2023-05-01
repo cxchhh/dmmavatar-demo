@@ -12,6 +12,8 @@ class MLP{
         this.act0=act0;
         this.act1=act1;
         this.gpu=new GPU();
+        this.sfc0=new Float32Array(16*14);
+        this.sfc1=new Float32Array(8*16);
     }
     forward(x){
         var out0=zeros([64],'float32');
@@ -37,7 +39,12 @@ class MLP{
             }
             out2.data[j]+=this.fc2_b.data[j];
         }
-        return out2;
+        for(let i=0;i<16*14;i++) this.sfc0[i]=out2.data[i];
+        for(let i=0;i<8*16;i++) this.sfc1[i]=out2.data[16*14+i];
+        return {
+            ret1:this.sfc0,
+            ret2:this.sfc1
+        }
     }
 }
 export default MLP;
