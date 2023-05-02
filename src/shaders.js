@@ -98,6 +98,7 @@ export function getFragmentShaderSource() {
     uniform sampler2D sfc0Tex;
     uniform sampler2D sfc1Tex;
     uniform sampler2D imgTex;
+    uniform int depthOnly;
     out vec4 outColor;
     float coef[8];
     float sfc0(int i,int j) {
@@ -142,6 +143,9 @@ export function getFragmentShaderSource() {
         return c0*coef[0]+c1*coef[1]+c2*coef[2]+c3*coef[3]+c4*coef[4]+c5*coef[5]+c6*coef[6]+c7*coef[7];
     }
     void main() {
+        if (depthOnly != 0)
+            return;
+
         vec3 v_viewdir = normalize(v_viewpos);
         vec4 v_posf0=texture(pos_featureTex,vec2(v_uv.x/2.0,v_uv.y));
         vec4 v_posf1=texture(pos_featureTex,vec2(v_uv.x/2.0+0.5,v_uv.y));

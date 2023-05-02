@@ -19,6 +19,7 @@ class Renderer {
         this.T = 6;
         this.I = this.tex.length;
         this.F_num = 1.0;
+        this.preciseOcclusion = false;
         this.canvas = document.querySelector("#canvas");
         this.gl = this.canvas.getContext("webgl2");
         this.index = new Int32Array(this.V);
@@ -34,23 +35,14 @@ class Renderer {
         var gl = this.gl;
         if (this.idx == 0) {
             webglUtils.resizeCanvasToDisplaySize(gl.canvas);
-            // Tell WebGL how to convert from clip space to pixels
             gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-            // Clear the canvas
             gl.clearColor(1, 1, 1, 1);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-            // turn on depth testing
-            gl.enable(gl.DEPTH_TEST);
-            gl.depthMask(true);
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-            // tell webgl to cull faces
             gl.enable(gl.CULL_FACE);
-        }
-        else{
             gl.enable(gl.DEPTH_TEST);
-            gl.depthMask(true);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         }
+
         // Tell it to use our program (pair of shaders)
         gl.useProgram(this.program);
         // Bind the attribute/buffer set we want.
@@ -70,13 +62,29 @@ class Renderer {
        
         gl.uniform1i(this.posfLocation, 16+this.idx);
         gl.uniform1i(this.imgLocation, 24+this.idx);
-        
-        // Draw the geometry.
+
         var primitiveType = gl.TRIANGLES;
         var offset = 0;
         var count = Math.floor(this.F * 3 * this.F_num);
+
+        if (this.preciseOcclusion) {
+            gl.disable(gl.BLEND);
+            gl.depthFunc(gl.LESS);
+            gl.depthMask(true);
+            gl.colorMask(false, false, false, false);
+            gl.uniform1i(this.depthOnlyLocation, 1);
+            gl.drawElements(primitiveType, count, gl.UNSIGNED_INT, offset);
+
+            gl.depthMask(false);
+        } else {
+            gl.depthMask(true);
+        }
+
+        gl.enable(gl.BLEND);
+        gl.depthFunc(gl.LEQUAL);
+        gl.colorMask(true, true, true, true);
+        gl.uniform1i(this.depthOnlyLocation, 0);
         gl.drawElements(primitiveType, count, gl.UNSIGNED_INT, offset);
-        //gl.drawArrays(gl.TRIANGLES,offset,count);
     }
 
     async setStatics() {
@@ -104,6 +112,7 @@ class Renderer {
         this.imgLocation = gl.getUniformLocation(program, `imgTex`);
         this.sfc0Location=gl.getUniformLocation(program,"sfc0Tex");
         this.sfc1Location=gl.getUniformLocation(program,"sfc1Tex");
+        this.depthOnlyLocation=gl.getUniformLocation(program,"depthOnly");
         // look up uniform locations
         this.matrixLocation = gl.getUniformLocation(program, "u_matrix");
         this.normalMatrixLocation = gl.getUniformLocation(program, "u_normal_matrix");

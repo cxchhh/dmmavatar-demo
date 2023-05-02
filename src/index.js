@@ -136,6 +136,7 @@ window.onload = async function () {
         );
     }
     this.max_M = this.M;
+    this.preciseOcclusion = false;
     pp.innerHTML += "meshes loaded\n";
     await forward(this);
     //console.log(show(this.transform));
@@ -161,6 +162,15 @@ async function forward(th) {
 function uiInit(th) {
     var translation = [0, 0, -960];
     var rotation = [0, 0, 0];
+    webglLessonsUI.setupSlider("#precise_occlusion", {
+        value: 0,
+        slide: function (event, ui) {
+            th.preciseOcclusion = ui.value > 0.5;
+        },
+        min: 0,
+        max: 1,
+        step: 1,
+    });
     webglLessonsUI.setupSlider("#M_num", {
         value: th.M,
         slide: function (event, ui) {
@@ -311,6 +321,7 @@ function uiInit(th) {
         view_matrix = m4.zRotate(view_matrix, rotation[2]);
 
         for (let i = 0; i < Math.min(th.M, th.max_M); i++) {
+            th.renderers[i].preciseOcclusion = th.preciseOcclusion;
             th.renderers[i].matrix = m4.multiply(projection_matrix, view_matrix);
             th.renderers[i].normal_matrix = m4.transpose(m4.inverse(view_matrix));
             th.renderers[i].view_matrix = view_matrix;

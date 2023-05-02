@@ -3,3 +3,4 @@ mesh_data/
 flame_pytorch/
 .vscode/
 flame/
+dist/
