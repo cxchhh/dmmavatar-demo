@@ -153,6 +153,7 @@ async function forward(th) {
 function uiInit(th) {
     var translation = [0, 0, -900];
     var rotation = [0, 0, 0];
+    var rotationLimit = degToRad(15);
     webglLessonsUI.setupSlider("#precise_occlusion", {
         value: 0,
         slide: function (event, ui) {
@@ -261,6 +262,8 @@ function uiInit(th) {
         if (btn == 0) {
             rotation[0] = rotx + (e.clientY - lastrotx) / 250;
             rotation[1] = roty + (e.clientX - lastroty) / 250;
+            rotation[0] = Math.min(Math.max(rotation[0], -rotationLimit), rotationLimit);
+            rotation[1] = Math.min(Math.max(rotation[1], -rotationLimit), rotationLimit);
         }
     };
     th.canvas.onmouseup = function (e) {
@@ -270,8 +273,8 @@ function uiInit(th) {
     th.canvas.onwheel = function (e) {
         if (!incanvas) return;
         translation[2] += e.wheelDelta / 2;
-        if (translation[2] > 1) translation[2] = 1;
-        if (translation[2] < -2000) translation[2] = -2000;
+        translation[2] = Math.min(Math.max(translation[2], -2000), 1);
+        e.preventDefault();
     };
     var winX = null;
     var winY = null;

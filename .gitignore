@@ -1,5 +1,6 @@
 node_modules/
-mesh_data/
+mesh_data**/
+sequence_data**/
 flame_pytorch/
 .vscode/
 flame/
