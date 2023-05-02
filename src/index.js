@@ -1,10 +1,8 @@
 import npyjs from "npyjs";
 import ndarray from "ndarray";
 import FLAME from "./flame.js";
-import show from "ndarray-show";
 import zeros from "zeros";
 import Renderer from "./renderer.js";
-import { addeq, subseq, addseq, mul } from "ndarray-ops";
 import MLP from "./mlp.js";
 import m4 from "./m4.js";
 
@@ -22,10 +20,6 @@ async function loadnpyu8(url) {
     var npy = await n.load(url);
     return ndarray(new Uint8Array(npy.data), npy.shape);
 }
-function radToDeg(r) {
-    return (r * 180) / Math.PI;
-}
-
 function degToRad(d) {
     return (d * Math.PI) / 180;
 }
@@ -139,28 +133,25 @@ window.onload = async function () {
     this.preciseOcclusion = false;
     pp.innerHTML += "meshes loaded\n";
     await forward(this);
-    //console.log(show(this.transform));
     for (let i = 0; i < this.M; i++) {
         await this.renderers[i].setStatics();
     }
     uiInit(this);
 };
+
 async function forward(th) {
     var retVal = await th.flame.lbs(th.betas, th.pose_params);
     th.poses = retVal.ret1;
     th.transform = retVal.ret2;
-    th.global_input.set(th.betas.data, 0);
-    th.global_input[50] = th.pose_params.data[6];
-    th.global_input[51] = th.pose_params.data[7];
-    th.global_input[52] = th.pose_params.data[8];
-    retVal = await th.global_mlp.forward(th.global_input);
-    th.sfc0 = retVal.ret1;
-    th.sfc1 = retVal.ret2;
-    //console.log(th.sfc0,th.sfc1);
+    th.global_input[0] = th.pose_params.data[6];
+    th.global_input[1] = th.pose_params.data[7];
+    th.global_input[2] = th.pose_params.data[8];
+    th.global_input.set(th.betas.data, 3);
+    th.sfc = await th.global_mlp.forward(th.global_input);
 }
 
 function uiInit(th) {
-    var translation = [0, 0, -960];
+    var translation = [0, 0, -900];
     var rotation = [0, 0, 0];
     webglLessonsUI.setupSlider("#precise_occlusion", {
         value: 0,
@@ -176,7 +167,7 @@ function uiInit(th) {
         slide: function (event, ui) {
             th.max_M = Math.round(ui.value);
         },
-        min: 0,
+        min: 1,
         max: th.M,
         step: 1,
     });
@@ -307,7 +298,7 @@ function uiInit(th) {
         // Compute the matrix
         var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
         var zNear = 0.1;
-        var zFar = 100;
+        var zFar = 50;
         var projection_matrix = m4.perspective(degToRad(14), aspect, zNear, zFar);
         var view_matrix = m4.scaling(1, 1, 1);
         view_matrix = m4.translate(
@@ -320,11 +311,12 @@ function uiInit(th) {
         view_matrix = m4.yRotate(view_matrix, rotation[1]);
         view_matrix = m4.zRotate(view_matrix, rotation[2]);
 
+        th.vertex_matrix = m4.multiply(projection_matrix, view_matrix);
+        th.normal_matrix = m4.transpose(m4.inverse(view_matrix));
+        th.projection_matrix = projection_matrix;
+        th.view_matrix = view_matrix;
+
         for (let i = 0; i < Math.min(th.M, th.max_M); i++) {
-            th.renderers[i].preciseOcclusion = th.preciseOcclusion;
-            th.renderers[i].matrix = m4.multiply(projection_matrix, view_matrix);
-            th.renderers[i].normal_matrix = m4.transpose(m4.inverse(view_matrix));
-            th.renderers[i].view_matrix = view_matrix;
             th.renderers[i].render(th);
         }
 

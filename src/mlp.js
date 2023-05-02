@@ -1,50 +1,57 @@
 import ndarray from "ndarray";
-import { GPU } from "gpu.js";
 import zeros from "zeros";
-class MLP{
-    constructor(fc0_w,fc0_b,fc1_w,fc1_b,fc2_w,fc2_b,act0,act1){
-        this.fc0_w=fc0_w;
-        this.fc0_b=fc0_b;
-        this.fc1_w=fc1_w;
-        this.fc1_b=fc1_b;
-        this.fc2_w=fc2_w;
-        this.fc2_b=fc2_b;
-        this.act0=act0;
-        this.act1=act1;
-        this.gpu=new GPU();
-        this.sfc0=new Float32Array(16*14);
-        this.sfc1=new Float32Array(8*16);
+
+class MLP {
+    constructor(fc0_w, fc0_b, fc1_w, fc1_b, fc2_w, fc2_b, act0, act1) {
+        this.fc0_w = fc0_w;
+        this.fc0_b = fc0_b;
+        this.fc1_w = fc1_w;
+        this.fc1_b = fc1_b;
+        this.fc2_w = fc2_w;
+        this.fc2_b = fc2_b;
+        this.act0 = act0;
+        this.act1 = act1;
+
+        this.sfc_dims = [14, 16, 8];
+        this.sfc_height = this.sfc_dims.slice(1).reduce((a, b) => a + b, 0);
+        this.sfc_width = this.sfc_dims.slice(0, -1).reduce((a, b) => Math.max(a, b), 0);
+        this.sfc = zeros([this.sfc_height, this.sfc_width], "float32");
     }
-    forward(x){
-        var out0=zeros([64],'float32');
-        for(let j=0;j<64;j++){
-            for(let i=0;i<53;i++){
-                out0.data[j]+=this.fc0_w.data[j*53+i]*x[i];
+
+    linear(x, w, b, a) {
+        var out = zeros([w.shape[0]], "float32");
+        for (let j = 0; j < w.shape[0]; j++) {
+            for (let i = 0; i < w.shape[1]; i++) {
+                out.data[j] += w.data[j * w.shape[1] + i] * x[i];
             }
-            out0.data[j]+=this.fc0_b.data[j];
-            out0.data[j]=Math.max(out0.data[j],this.act0.data[j]*out0.data[j]);
-        }
-        var out1=zeros([64],'float32');
-        for(let j=0;j<64;j++){
-            for(let i=0;i<64;i++){
-                out1.data[j]+=this.fc1_w.data[j*64+i]*out0.data[i];
+            out.data[j] += b.data[j];
+            if (a != null) {
+                out.data[j] = Math.max(out.data[j], a.data[j] * out.data[j]);
             }
-            out1.data[j]+=this.fc1_b.data[j];
-            out1.data[j]=Math.max(out1.data[j],this.act1.data[j]*out1.data[j]);
         }
-        var out2=zeros([352],'float32');
-        for(let j=0;j<352;j++){
-            for(let i=0;i<64;i++){
-                out2.data[j]+=this.fc2_w.data[j*64+i]*out1.data[i];
+        return out;
+    }
+
+    forward(x) {
+        let out0 = this.linear(x, this.fc0_w, this.fc0_b, this.act0);
+        let out1 = this.linear(out0.data, this.fc1_w, this.fc1_b, this.act1);
+        let out2 = this.linear(out1.data, this.fc2_w, this.fc2_b, null);
+
+        let count = 0;
+        let row_count = 0;
+        for (let layer = 0; layer < this.sfc_dims.length - 1; layer++) {
+            let dim_in = this.sfc_dims[layer];
+            let dim_out = this.sfc_dims[layer + 1];
+            for (let i = 0; i < dim_out; i++) {
+                for (let j = 0; j < dim_in; j++) {
+                    this.sfc.data[row_count * this.sfc_width + j] = out2.data[count++];
+                }
+                row_count++;
             }
-            out2.data[j]+=this.fc2_b.data[j];
         }
-        for(let i=0;i<16*14;i++) this.sfc0[i]=out2.data[i];
-        for(let i=0;i<8*16;i++) this.sfc1[i]=out2.data[16*14+i];
-        return {
-            ret1:this.sfc0,
-            ret2:this.sfc1
-        }
+
+        return this.sfc;
     }
 }
+
 export default MLP;

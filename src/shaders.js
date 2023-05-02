@@ -94,18 +94,29 @@ export function getFragmentShaderSource() {
     in vec2 v_uv;
     in vec3 v_normal;
     in vec3 v_viewpos;
-    uniform sampler2D pos_featureTex;
-    uniform sampler2D sfc0Tex;
-    uniform sampler2D sfc1Tex;
-    uniform sampler2D imgTex;
+    uniform sampler2D posfeatTex;
+    uniform sampler2D radfeatTex;
+    uniform sampler2D sfcTex;
     uniform int depthOnly;
     out vec4 outColor;
+
+    vec2 posfeat_s = 1.0 / vec2(2.0,1.0);
+    vec2 radiance_s = 1.0 / vec2(4.0,2.0);
+
     float coef[8];
     float sfc0(int i,int j) {
-        return texelFetch(sfc0Tex,ivec2(j,i),0).x;
+        return texelFetch(sfcTex,ivec2(j,i),0).x;
     }
     float sfc1(int i,int j) {
-        return texelFetch(sfc1Tex,ivec2(j,i),0).x;
+        return texelFetch(sfcTex,ivec2(j,i+16),0).x;
+    }
+    vec4 posfeat(int i) {
+        vec2 uv_offset = vec2(float(i),0.0);
+        return texture(posfeatTex,(v_uv+uv_offset)*posfeat_s);
+    }
+    vec4 radianceBasis(int i) {
+        vec2 uv_offset = vec2(float(i&3),float(i>>2));
+        return texture(radfeatTex,(v_uv+uv_offset)*radiance_s);
     }
     void runSpatialMLP(vec4 posf0, vec4 posf1, vec3 normal, vec3 viewdir) {
         float out1[16];
@@ -126,7 +137,7 @@ export function getFragmentShaderSource() {
             coef[i]=exp(10.0*coef[i]);
             esum+=coef[i];
         }
-        float inv_esum = 1.0/esum;
+        float inv_esum=1.0/esum;
         for(int i=0;i<8;i++){
             coef[i]*=inv_esum;
         }
@@ -146,20 +157,22 @@ export function getFragmentShaderSource() {
         if (depthOnly != 0)
             return;
 
-        vec3 v_viewdir = normalize(v_viewpos);
-        vec4 v_posf0=texture(pos_featureTex,vec2(v_uv.x/2.0,v_uv.y));
-        vec4 v_posf1=texture(pos_featureTex,vec2(v_uv.x/2.0+0.5,v_uv.y));
-        
+        vec3 v_viewdir=normalize(v_viewpos);
+        vec4 v_posf0=posfeat(0);
+        vec4 v_posf1=posfeat(1);
         runSpatialMLP(v_posf0, v_posf1, v_normal, v_viewdir);
         
         vec4 sumColor=vec4(0);
         for(int i=0;i<8;i++){
-            vec4 c=texture(imgTex,vec2(v_uv.x/4.0+0.25*float(i&3),v_uv.y/2.0+0.5*float(i>>2)));
-            sumColor+=coef[i]*c;
+            sumColor+=coef[i]*radianceBasis(i);
         }
 
-        //outColor = vec4((v_normal+1.0)/2.0,sumColor.w);
+        //outColor=radianceBasis(0);
+        //outColor=posfeat(0);
+        //outColor=vec4((v_normal+1.0)/2.0,1.0);
+        //outColor=vec4((v_viewdir+1.0)/2.0,1.0);
         //outColor=coefColor();
         outColor=sumColor;
+        //outColor=vec4(vec3(outColor)*outColor.w+vec3(1.0)*(1.0-outColor.w),1.0);
     }`;
 }

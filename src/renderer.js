@@ -2,7 +2,18 @@
 import { getFragmentShaderSource, getVertexShaderSource } from "./shaders.js";
 
 class Renderer {
-    constructor(idx, vertices, faces, lbs_weights, posedirs, shapedirs, uvs, normals, pos_feature, tex) {
+    constructor(
+        idx,
+        vertices,
+        faces,
+        lbs_weights,
+        posedirs,
+        shapedirs,
+        uvs,
+        normals,
+        pos_feature,
+        tex
+    ) {
         this.idx = idx;
         this.vertices = vertices;
         this.faces = faces;
@@ -29,6 +40,7 @@ class Renderer {
         this.vertexShaderSource = getVertexShaderSource(this.J);
         this.fragmentShaderSource = getFragmentShaderSource();
     }
+
     render(global) {
         this.setGlobal(global);
         this.setDynamics();
@@ -48,7 +60,7 @@ class Renderer {
         // Bind the attribute/buffer set we want.
         gl.bindVertexArray(this.vao);
         // Set the matrix.
-        gl.uniformMatrix4fv(this.matrixLocation, false, this.matrix);
+        gl.uniformMatrix4fv(this.matrixLocation, false, this.vertex_matrix);
         gl.uniformMatrix4fv(this.normalMatrixLocation, false, this.normal_matrix);
         gl.uniformMatrix4fv(this.viewMatrixLocation, false, this.view_matrix);
         gl.uniform1i(this.betasLocation, 0);
@@ -57,11 +69,10 @@ class Renderer {
         gl.uniform1i(this.posedirsLocation, 3);
         gl.uniform1i(this.transformLocation, 4);
         gl.uniform1i(this.lbsweightLocation, 5);
-        gl.uniform1i(this.sfc0Location, 6);
-        gl.uniform1i(this.sfc1Location, 7);
-       
-        gl.uniform1i(this.posfLocation, 16+this.idx);
-        gl.uniform1i(this.imgLocation, 24+this.idx);
+        gl.uniform1i(this.sfcLocation, 6);
+
+        gl.uniform1i(this.posfLocation, 16 + this.idx);
+        gl.uniform1i(this.imgLocation, 24 + this.idx);
 
         var primitiveType = gl.TRIANGLES;
         var offset = 0;
@@ -108,11 +119,10 @@ class Renderer {
         this.posedirsLocation = gl.getUniformLocation(program, "posedirsTex");
         this.transformLocation = gl.getUniformLocation(program, "transformTex");
         this.lbsweightLocation = gl.getUniformLocation(program, "lbsweightTex");
-        this.posfLocation = gl.getUniformLocation(program, "pos_featureTex");
-        this.imgLocation = gl.getUniformLocation(program, `imgTex`);
-        this.sfc0Location=gl.getUniformLocation(program,"sfc0Tex");
-        this.sfc1Location=gl.getUniformLocation(program,"sfc1Tex");
-        this.depthOnlyLocation=gl.getUniformLocation(program,"depthOnly");
+        this.posfLocation = gl.getUniformLocation(program, "posfeatTex");
+        this.imgLocation = gl.getUniformLocation(program, `radfeatTex`);
+        this.sfcLocation = gl.getUniformLocation(program, "sfcTex");
+        this.depthOnlyLocation = gl.getUniformLocation(program, "depthOnly");
         // look up uniform locations
         this.matrixLocation = gl.getUniformLocation(program, "u_matrix");
         this.normalMatrixLocation = gl.getUniformLocation(program, "u_normal_matrix");
@@ -203,7 +213,7 @@ class Renderer {
         this.lbswdata.set(this.lbs_weights.data, 0);
 
         this.posfTexture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE0 + 16+this.idx);
+        gl.activeTexture(gl.TEXTURE0 + 16 + this.idx);
         gl.bindTexture(gl.TEXTURE_2D, this.posfTexture);
         var level = 0;
         var internalFormat = gl.RGBA8;
@@ -212,7 +222,6 @@ class Renderer {
         var border = 0;
         var format = gl.RGBA;
         var type = gl.UNSIGNED_BYTE;
-        //console.log(this.pos_feature)
         gl.texImage2D(
             gl.TEXTURE_2D,
             level,
@@ -228,26 +237,39 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        
 
         this.imgTexture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE0 + 24+this.idx);
+        gl.activeTexture(gl.TEXTURE0 + 24 + this.idx);
         gl.bindTexture(gl.TEXTURE_2D, this.imgTexture);
         var level = 0;
         var internalFormat = gl.RGBA8;
         var format = gl.RGBA;
         var type = gl.UNSIGNED_BYTE;
-        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, 4096, 2048, 0, format, type, this.tex.data);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            level,
+            internalFormat,
+            this.tex.shape[1],
+            this.tex.shape[0],
+            0,
+            format,
+            type,
+            this.tex.data
+        );
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        this.sfc0Texture=gl.createTexture();
-        this.sfc1Texture=gl.createTexture();
-
+        this.sfcTexture = gl.createTexture();
     }
+
     setGlobal(global) {
+        this.preciseOcclusion = global.preciseOcclusion;
+        this.vertex_matrix = global.vertex_matrix;
+        this.normal_matrix = global.normal_matrix;
+        this.view_matrix = global.view_matrix;
+
         var gl = this.gl;
         gl.activeTexture(gl.TEXTURE0 + 0);
         gl.bindTexture(gl.TEXTURE_2D, this.betasTexture);
@@ -283,7 +305,6 @@ class Renderer {
         var border = 0;
         var format = gl.RED;
         var type = gl.FLOAT;
-        //poses.set(35,0.5);
         gl.texImage2D(
             gl.TEXTURE_2D,
             level,
@@ -326,37 +347,11 @@ class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
         gl.activeTexture(gl.TEXTURE0 + 6);
-        gl.bindTexture(gl.TEXTURE_2D, this.sfc0Texture);
+        gl.bindTexture(gl.TEXTURE_2D, this.sfcTexture);
         var level = 0;
         var internalFormat = gl.R32F;
-        var height = 16;
-        var width = 14;
-        var border = 0;
-        var format = gl.RED;
-        var type = gl.FLOAT;
-        //global.sfc0[0]=1.0;
-        gl.texImage2D(
-            gl.TEXTURE_2D,
-            level,
-            internalFormat,
-            width,
-            height,
-            border,
-            format,
-            type,
-            global.sfc0
-        );
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        gl.activeTexture(gl.TEXTURE0 + 7);
-        gl.bindTexture(gl.TEXTURE_2D, this.sfc1Texture);
-        var level = 0;
-        var internalFormat = gl.R32F;
-        var height = 8;
-        var width = 16;
+        var height = global.sfc.shape[0];
+        var width = global.sfc.shape[1];
         var border = 0;
         var format = gl.RED;
         var type = gl.FLOAT;
@@ -369,13 +364,14 @@ class Renderer {
             border,
             format,
             type,
-            global.sfc1
+            global.sfc.data
         );
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     }
+
     setDynamics() {
         var gl = this.gl;
         gl.activeTexture(gl.TEXTURE0 + 1);
