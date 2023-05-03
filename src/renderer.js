@@ -48,7 +48,8 @@ class Renderer {
         if (this.idx == 0) {
             webglUtils.resizeCanvasToDisplaySize(gl.canvas);
             gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-            gl.clearColor(1, 1, 1, 1);
+            //gl.clearColor(0, 0, 0, 0); //black bg
+            gl.clearColor(1, 1, 1, 1); //white bg
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             gl.enable(gl.CULL_FACE);
             gl.enable(gl.DEPTH_TEST);
@@ -98,7 +99,7 @@ class Renderer {
         gl.drawElements(primitiveType, count, gl.UNSIGNED_INT, offset);
     }
 
-    async setStatics() {
+    setStatics() {
         var gl = this.gl;
 
         // Use our boilerplate utils to compile the shaders and link into a program

@@ -25,8 +25,26 @@
             width: 150px;
             height: 35px;
             border-radius: 10px;
-            display: none;
             background-color: skyblue;
+        }
+
+        .abv {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            width: 0px;
+            height: 35px;
+            border-radius: 10px;
+            z-index: 100;
+        }
+
+        .aniname {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            width: 150px;
+            height: 35px;
+            z-index: 120;
             text-transform: none;
             font-size: 15px;
             text-align: center;
@@ -155,12 +173,11 @@
         </div>
         <div class="col" style="width: 120px;" id="M_num"></div>
         <div class="col" style="width: 140px;" id="F_num"></div>
-        <div class="col row" style="width:470px">
-            <div class="col waves-effect waves-light btn white-text darkblue ani" id="sandbox">Sandbox</div>
-            <div class="col waves-effect waves-light btn white-text skyblue ani" id="ani1">Animation 1</div>
-            <div class="col waves-effect waves-light btn white-text skyblue ani" id="ani2">Animation 2</div>
-            <div class="col waves-effect waves-light btn white-text skyblue ani" id="ani3">Animation 3</div>
-            <div class="col waves-effect waves-light btn white-text skyblue ani" id="ani4">Animation 4</div>
+        <div class="col row" id="btn_field" style="width:470px">
+            <div class="col waves-effect waves-light btn white-text ani yellow darken-1" style="display: none;" id="sandbox">
+                Sandbox</div>
+            <div class="col waves-effect waves-light btn white-text ani orange darken-4" style="display: none;" id="resetBtn">
+                Reset</div>
         </div>
     </div>
 

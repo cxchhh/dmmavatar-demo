@@ -5,6 +5,7 @@ import zeros from "zeros";
 import Renderer from "./renderer.js";
 import MLP from "./mlp.js";
 import m4 from "./m4.js";
+import { copy } from "./ndutils.js";
 
 let n = new npyjs();
 
@@ -61,9 +62,8 @@ window.onload = async function () {
     );
     this.global_input = new Float32Array(53);
     pp.innerHTML += "MLP loaded\n";
-
-    this.betas = zeros([50], "float32");
-    this.betas = ndarray(
+    this.betas=zeros([50],'float32');
+    this.betas_conon = ndarray(
         new Float32Array([
             -0.7734001874923706, 0.47500404715538025, -0.2207159399986267, 0.4112471044063568,
             -0.7225434184074402, 0.7391737103462219, 0.048007089644670486, -0.17434833943843842,
@@ -81,8 +81,9 @@ window.onload = async function () {
         ]),
         [50]
     );
-    this.pose_params = zeros([15], "float32");
-    this.pose_params = ndarray(
+    this.betas=copy(this.betas_conon);
+    this.pose_params=zeros([15],'float32');
+    this.pose_params_conon = ndarray(
         new Float32Array([
             0.12880776822566986, -0.0023364718072116375, -0.042034655809402466,
             -0.10783462971448898, -0.015666034072637558, 0.002099345438182354, 0.012164629995822906,
@@ -91,6 +92,7 @@ window.onload = async function () {
         ]),
         [15]
     );
+    this.pose_params=copy(this.pose_params_conon);
     //this.pose_params.set(6,0.2);
     this.M = 8;
     this.I = 8;
@@ -132,9 +134,20 @@ window.onload = async function () {
     this.max_M = this.M;
     this.preciseOcclusion = false;
     pp.innerHTML += "meshes loaded\n";
+
     this.seq_data = await loadnpy("sequence_data/flame_sequences.npy");
-    console.log(this.seq_data);
-    this.anis=4;
+    await fetch('sequence_data//flame_sequences.json').then((response) => response.json()).then((json) => (this.seq_json = json));
+    this.stframes = [0];
+    this.edframes = [0];
+    this.aninames = [""];
+    this.anis = 0;
+    for (var ani in this.seq_json) {
+        this.anis++;
+        this.aninames.push(ani);
+        var ani_frame = this.seq_json[this.aninames[this.anis]];
+        this.stframes.push(ani_frame.start);
+        this.edframes.push(ani_frame.end);
+    }
     pp.innerHTML += "animation loaded\n";
 
     await forward(this);
@@ -157,9 +170,9 @@ async function forward(global) {
 
 function uiInit(global) {
     var frameCount = 0;
-    var sandbox = 0,onAni=new Array(global.anis+1);
-    var keyframes=[0, 1191, 2518, 4343, 6056],playing=0;
-    var stframe=0,edframe=-1,current=0;
+    var sandbox = 0;
+    var startplay = 0, onani_ = 0;
+    var stframe = 0, edframe = -1, current = 0;
     var lastTime = performance.now();
     var gl = global.gl;
     var timeTest = document.getElementById("timeTest");
@@ -191,41 +204,55 @@ function uiInit(global) {
         precision: 4,
     });
     $("#sandbox")[0].style.display = "inline-block";
-    $("#ani1")[0].style.display = "inline-block";
-    $("#ani2")[0].style.display = "inline-block";
-    $("#ani3")[0].style.display = "inline-block";
-    $("#ani4")[0].style.display = "inline-block";
-
-    $("#sandbox")[0].onclick=function(){
-        sandbox=sandbox^1;
-        if(sandbox){
-            $("#sandbox")[0].style.backgroundColor="darkblue";
-            $("#uiContainer")[0].style.display="inline-block";
+    $("#resetBtn")[0].style.display = "inline-block";
+    for (let i = 1; i <= global.anis; i++) {
+        $("#btn_field")[0].innerHTML += `
+        <div class="col waves-effect waves-light btn white-text skyblue ani" id="ani${i}">
+                <div class="white-text aniname">${global.aninames[i]}</div>
+                <div class="abv" id="abv${i}" style="background-color: darkblue;"></div>
+            </div>
+        `
+    }
+    $("#sandbox")[0].onclick = function () {
+        sandbox = sandbox ^ 1;
+        if (sandbox) {
+            $("#sandbox")[0].className=$("#sandbox")[0].className.replace("darken-1","darken-4");
+            $("#uiContainer")[0].style.display = "inline-block";
         }
-        else{
-            $("#sandbox")[0].style.backgroundColor="skyblue";
-            $("#uiContainer")[0].style.display="none";
+        else {
+            $("#sandbox")[0].className=$("#sandbox")[0].className.replace("darken-4","darken-1");
+            $("#uiContainer")[0].style.display = "none";
         }
     }
-    for(let i=1;i<=global.anis;i++){
-        $(`#ani${i}`)[0].onclick=function(){
-            onAni[i]=onAni[i]^1;
-            if(onAni[i]){
-                $(`#ani${i}`)[0].style.backgroundColor="darkblue";
-                for(let j=1;j<=global.anis;j++) if(j!=i) {
-                    $(`#ani${j}`)[0].style.backgroundColor="skyblue";
-                    onAni[j]=0;
-                }
-                $("#sandbox")[0].style.backgroundColor="skyblue";
-                $("#uiContainer")[0].style.display="none";
-                current=0;
-                stframe=keyframes[i-1];
-                edframe=keyframes[i];
-                playing=1;
+    $("#resetBtn")[0].onclick = async function () {
+        global.betas=copy(global.betas_conon);
+        global.pose_params=copy(global.pose_params_conon);
+        if(onani_)$(`#abv${onani_}`)[0].style.width = "0px";
+        onani_=0;
+        current=0;
+        edframe=-1;
+        await forward(global);
+        translation = [0, 0, -900];
+        rotation = [0, 0, 0];
+        uiSync();
+    }
+    for (let i = 1; i <= global.anis; i++) {
+        $(`#ani${i}`)[0].onclick = function () {
+            if (onani_ == i && edframe != -1) {
+                onani_ = 0;
+                current = 0;
+                edframe = -1;
+                $(`#abv${i}`)[0].style.width = "0px";
+                return;
             }
-            else{
-                $(`#ani${i}`)[0].style.backgroundColor="skyblue";
+            onani_ = i;
+            for (let j = 1; j <= global.anis; j++) if (j != i) {
+                $(`#abv${j}`)[0].style.width = "0px";
             }
+            current = 0;
+            stframe = global.stframes[i];
+            edframe = global.edframes[i];
+            startplay = 1;
         }
     }
     for (var i = 0; i < 50; i++)
@@ -243,8 +270,8 @@ function uiInit(global) {
             value: global.pose_params.data[i],
             slide: updatePoses(i),
             step: 0.001,
-            min: -0.5,
-            max: 0.5,
+            min: -1,
+            max: 1,
             precision: 3,
         });
     function updateBetas(i) {
@@ -263,6 +290,16 @@ function uiInit(global) {
         return function (event, ui) {
             for (let i = 0; i < global.M; i++) global.renderers[i].F_num = ui.value;
         };
+    }
+    function uiSync(){
+        for(let i=0;i<50;i++){
+            $(".gman-widget-slider")[i].value=(global.betas.data[i]*1000).toFixed(0);
+            $(".gman-widget-value")[i].innerHTML=global.betas.data[i].toFixed(3);
+        }
+        for(let i=0;i<15;i++){
+            $(".gman-widget-slider")[50+i].value=(global.pose_params.data[i]*1000).toFixed(0);
+            $(".gman-widget-value")[50+i].innerHTML=global.pose_params.data[i].toFixed(3);
+        }
     }
     global.canvas.addEventListener("contextmenu", function (e) {
         e.preventDefault();
@@ -347,7 +384,7 @@ function uiInit(global) {
         var zFar = 50;
         var projection_matrix = m4.perspective(degToRad(14), aspect, zNear, zFar);
         var view_matrix = m4.scaling(1, 1, 1);
-        
+
         view_matrix = m4.translate(
             view_matrix,
             translation[0] / 200,
@@ -362,21 +399,22 @@ function uiInit(global) {
         global.normal_matrix = m4.transpose(m4.inverse(view_matrix));
         global.projection_matrix = projection_matrix;
         global.view_matrix = view_matrix;
-        if(playing){
-            current=stframe;
-            playing=0;
+        if (startplay) {
+            current = stframe;
+            startplay = 0;
         }
-        if(edframe!=-1){
+        if (edframe != -1) {
             current++;
+            $(`#abv${onani_}`)[0].style.width = (150 * (current - stframe) / (edframe - stframe)) + "px";
             //console.log(edframe,current,frameCount);
-            var frame_data=global.seq_data.data;
-            global.betas.data=frame_data.slice(current*65,current*65+50);
-            global.pose_params.data=frame_data.slice(current*65+50,current*65+65);
+            var frame_data = global.seq_data.data;
+            global.betas.data = frame_data.slice(current * 65, current * 65 + 50);
+            global.pose_params.data = frame_data.slice(current * 65 + 50, current * 65 + 65);
             await forward(global);
-            
+            uiSync();
         }
-        if(current==edframe-1){
-            edframe=-1;
+        if (current == edframe - 1) {
+            edframe = -1;
         }
         for (let i = 0; i < Math.min(global.M, global.max_M); i++) {
             global.renderers[i].render(global);
