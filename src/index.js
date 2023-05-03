@@ -132,6 +132,11 @@ window.onload = async function () {
     this.max_M = this.M;
     this.preciseOcclusion = false;
     pp.innerHTML += "meshes loaded\n";
+    this.seq_data = await loadnpy("sequence_data/flame_sequences.npy");
+    console.log(this.seq_data);
+    this.anis=4;
+    pp.innerHTML += "animation loaded\n";
+
     await forward(this);
     for (let i = 0; i < this.M; i++) {
         await this.renderers[i].setStatics();
@@ -139,37 +144,42 @@ window.onload = async function () {
     uiInit(this);
 };
 
-async function forward(th) {
-    var retVal = await th.flame.lbs(th.betas, th.pose_params);
-    th.poses = retVal.ret1;
-    th.transform = retVal.ret2;
-    th.global_input[0] = th.pose_params.data[6];
-    th.global_input[1] = th.pose_params.data[7];
-    th.global_input[2] = th.pose_params.data[8];
-    th.global_input.set(th.betas.data, 3);
-    th.sfc = await th.global_mlp.forward(th.global_input);
+async function forward(global) {
+    var retVal = await global.flame.lbs(global.betas, global.pose_params);
+    global.poses = retVal.ret1;
+    global.transform = retVal.ret2;
+    global.global_input[0] = global.pose_params.data[6];
+    global.global_input[1] = global.pose_params.data[7];
+    global.global_input[2] = global.pose_params.data[8];
+    global.global_input.set(global.betas.data, 3);
+    global.sfc = await global.global_mlp.forward(global.global_input);
 }
 
-function uiInit(th) {
+function uiInit(global) {
+    var frameCount = 0;
+    var sandbox = 0,onAni=new Array(global.anis+1);
+    var keyframes=[0, 1191, 2518, 4343, 6056],playing=0;
+    var stframe=0,edframe=-1,current=0;
+    var lastTime = performance.now();
+    var gl = global.gl;
+    var timeTest = document.getElementById("timeTest");
+    timeTest.innerHTML = "";
+
     var translation = [0, 0, -900];
     var rotation = [0, 0, 0];
     var rotationLimit = degToRad(15);
-    webglLessonsUI.setupSlider("#precise_occlusion", {
-        value: 0,
-        slide: function (event, ui) {
-            th.preciseOcclusion = ui.value > 0.5;
-        },
-        min: 0,
-        max: 1,
-        step: 1,
-    });
+
+    $("#precise_occlusion")[0].style.display = "inline-block";
+    $("#checkpo")[0].onclick = function () {
+        global.preciseOcclusion = $("#checkpo")[0].checked;
+    }
     webglLessonsUI.setupSlider("#M_num", {
-        value: th.M,
+        value: global.M,
         slide: function (event, ui) {
-            th.max_M = Math.round(ui.value);
+            global.max_M = Math.round(ui.value);
         },
         min: 1,
-        max: th.M,
+        max: global.M,
         step: 1,
     });
     webglLessonsUI.setupSlider("#F_num", {
@@ -180,9 +190,47 @@ function uiInit(th) {
         step: 0.0001,
         precision: 4,
     });
+    $("#sandbox")[0].style.display = "inline-block";
+    $("#ani1")[0].style.display = "inline-block";
+    $("#ani2")[0].style.display = "inline-block";
+    $("#ani3")[0].style.display = "inline-block";
+    $("#ani4")[0].style.display = "inline-block";
+
+    $("#sandbox")[0].onclick=function(){
+        sandbox=sandbox^1;
+        if(sandbox){
+            $("#sandbox")[0].style.backgroundColor="darkblue";
+            $("#uiContainer")[0].style.display="inline-block";
+        }
+        else{
+            $("#sandbox")[0].style.backgroundColor="skyblue";
+            $("#uiContainer")[0].style.display="none";
+        }
+    }
+    for(let i=1;i<=global.anis;i++){
+        $(`#ani${i}`)[0].onclick=function(){
+            onAni[i]=onAni[i]^1;
+            if(onAni[i]){
+                $(`#ani${i}`)[0].style.backgroundColor="darkblue";
+                for(let j=1;j<=global.anis;j++) if(j!=i) {
+                    $(`#ani${j}`)[0].style.backgroundColor="skyblue";
+                    onAni[j]=0;
+                }
+                $("#sandbox")[0].style.backgroundColor="skyblue";
+                $("#uiContainer")[0].style.display="none";
+                current=0;
+                stframe=keyframes[i-1];
+                edframe=keyframes[i];
+                playing=1;
+            }
+            else{
+                $(`#ani${i}`)[0].style.backgroundColor="skyblue";
+            }
+        }
+    }
     for (var i = 0; i < 50; i++)
         webglLessonsUI.setupSlider("#exp" + (i + 1), {
-            value: th.betas.data[i],
+            value: global.betas.data[i],
             slide: updateBetas(i),
             step: 0.001,
             min: -2,
@@ -192,7 +240,7 @@ function uiInit(th) {
 
     for (var i = 0; i < 15; i++)
         webglLessonsUI.setupSlider("#pose" + (i + 1), {
-            value: th.pose_params.data[i],
+            value: global.pose_params.data[i],
             slide: updatePoses(i),
             step: 0.001,
             min: -0.5,
@@ -201,22 +249,22 @@ function uiInit(th) {
         });
     function updateBetas(i) {
         return async function (e, ui) {
-            th.betas.set(i, ui.value);
-            await forward(th);
+            global.betas.set(i, ui.value);
+            await forward(global);
         };
     }
     function updatePoses(i) {
         return async function (e, ui) {
-            th.pose_params.set(i, ui.value);
-            await forward(th);
+            global.pose_params.set(i, ui.value);
+            await forward(global);
         };
     }
     function updateF() {
         return function (event, ui) {
-            for (let i = 0; i < th.M; i++) th.renderers[i].F_num = ui.value;
+            for (let i = 0; i < global.M; i++) global.renderers[i].F_num = ui.value;
         };
     }
-    th.canvas.addEventListener("contextmenu", function (e) {
+    global.canvas.addEventListener("contextmenu", function (e) {
         e.preventDefault();
     });
     var lastx = 0,
@@ -227,16 +275,16 @@ function uiInit(th) {
         basey,
         btn = 0;
     var rotx, roty, lastrotx, lastroty;
-    th.canvas.onmouseenter = function (e) {
+    global.canvas.onmouseenter = function (e) {
         incanvas = true;
         disableWindowScroll();
     };
-    th.canvas.onmouseleave = function (e) {
+    global.canvas.onmouseleave = function (e) {
         incanvas = false;
         down = false;
         enableWindowScroll();
     };
-    th.canvas.onmousedown = function (e) {
+    global.canvas.onmousedown = function (e) {
         if (!incanvas) return;
         down = true;
         if (e.button == 2) {
@@ -253,7 +301,7 @@ function uiInit(th) {
             lastroty = e.clientX;
         }
     };
-    th.canvas.onmousemove = function (e) {
+    global.canvas.onmousemove = function (e) {
         if (!down) return;
         if (btn == 2) {
             translation[0] = basex + e.clientX - lastx;
@@ -266,11 +314,11 @@ function uiInit(th) {
             rotation[1] = Math.min(Math.max(rotation[1], -rotationLimit), rotationLimit);
         }
     };
-    th.canvas.onmouseup = function (e) {
+    global.canvas.onmouseup = function (e) {
         if (!incanvas) return;
         down = false;
     };
-    th.canvas.onwheel = function (e) {
+    global.canvas.onwheel = function (e) {
         if (!incanvas) return;
         translation[2] += e.wheelDelta / 2;
         translation[2] = Math.min(Math.max(translation[2], -2000), 1);
@@ -292,11 +340,6 @@ function uiInit(th) {
         winY = null;
     }
 
-    var framwCount = 0;
-    var lastTime = performance.now();
-    var timeTest = document.getElementById("timeTest");
-    var gl = th.gl;
-
     async function drawLoop() {
         // Compute the matrix
         var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
@@ -304,6 +347,7 @@ function uiInit(th) {
         var zFar = 50;
         var projection_matrix = m4.perspective(degToRad(14), aspect, zNear, zFar);
         var view_matrix = m4.scaling(1, 1, 1);
+        
         view_matrix = m4.translate(
             view_matrix,
             translation[0] / 200,
@@ -314,24 +358,39 @@ function uiInit(th) {
         view_matrix = m4.yRotate(view_matrix, rotation[1]);
         view_matrix = m4.zRotate(view_matrix, rotation[2]);
 
-        th.vertex_matrix = m4.multiply(projection_matrix, view_matrix);
-        th.normal_matrix = m4.transpose(m4.inverse(view_matrix));
-        th.projection_matrix = projection_matrix;
-        th.view_matrix = view_matrix;
-
-        for (let i = 0; i < Math.min(th.M, th.max_M); i++) {
-            th.renderers[i].render(th);
+        global.vertex_matrix = m4.multiply(projection_matrix, view_matrix);
+        global.normal_matrix = m4.transpose(m4.inverse(view_matrix));
+        global.projection_matrix = projection_matrix;
+        global.view_matrix = view_matrix;
+        if(playing){
+            current=stframe;
+            playing=0;
+        }
+        if(edframe!=-1){
+            current++;
+            //console.log(edframe,current,frameCount);
+            var frame_data=global.seq_data.data;
+            global.betas.data=frame_data.slice(current*65,current*65+50);
+            global.pose_params.data=frame_data.slice(current*65+50,current*65+65);
+            await forward(global);
+            
+        }
+        if(current==edframe-1){
+            edframe=-1;
+        }
+        for (let i = 0; i < Math.min(global.M, global.max_M); i++) {
+            global.renderers[i].render(global);
         }
 
-        framwCount++;
-        if (framwCount % 10 == 0) {
+        frameCount++;
+        if (frameCount % 10 == 0) {
             var now = performance.now();
             var time = now - lastTime;
             lastTime = now;
             timeTest.innerHTML = "FPS:" + (1000 / (time / 10)).toFixed(2);
+
         }
         requestAnimationFrame(drawLoop);
     }
-
     requestAnimationFrame(drawLoop);
 }

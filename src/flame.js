@@ -48,7 +48,7 @@ var reshape_ = function (ndarr, new_shape) {
 }
 class FLAME {
     constructor(v_template, shapedirs, posedirs, J_regressor, parents) {
-        console.log("building flame");
+        //console.log("building flame");
         this.v_template = v_template;
         this.shapedirs = shapedirs;
         this.posedirs = posedirs;

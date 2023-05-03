@@ -3,119 +3,169 @@
 
 <head>
     <title>3d flame</title>
+    <link rel="stylesheet" href="./jsUtils/materialize.min.css">
     <style>
-        .slider{
+        .onerow {
             display: inline-block;
+            width: 120px;
+
         }
-        .metas{
+
+        .metas {
             margin-left: 30%;
         }
-        .p1{
-            border-left: 3px brown solid;
-            padding-left: 20px;
+
+        .p1 {
+            /* border-left: 3px brown solid; */
+            margin-left: 20px;
+        }
+
+        .ani {
+            margin: 5px;
+            width: 150px;
+            height: 35px;
+            border-radius: 10px;
+            display: none;
+            background-color: skyblue;
+            text-transform: none;
+            font-size: 15px;
+            text-align: center;
+        }
+
+        .thumb {
+            display: none;
         }
     </style>
 </head>
 
 <body>
-    <canvas id="canvas" width="1024px" height="768px" style="border:1px red solid; background-color: black;" @contextmenu.prevent></canvas>
-    <div style="position:absolute;margin-left:0%;" id="uiContainer">
-        <div id="ui">
+    <div>
+        <canvas id="canvas" width="1024px" height="768px"
+            style="display:inline-block; border:1px red solid; background-color: black;" @contextmenu.prevent></canvas>
+        <div style="position:absolute;margin-top:50px; display: none;" id="uiContainer">
             <div>
-                <div class="slider metas" id="precise_occlusion"></div>
-                <div class="slider" id="M_num"></div>
-                <div class="slider" id="F_num"></div>
-            </div>
-            <div>
-                <div class="slider" id="exp1"></div>
-                <div class="slider" id="exp2"></div>
-                <div class="slider" id="exp3"></div>
-                <div class="slider" id="exp4"></div>
-                <div class="slider" id="exp5"></div>
-                <div class="slider p1" id="pose1"></div>
-                <div class="slider" id="pose2"></div>
-                <div class="slider" id="pose3"></div>
-            </div>
-            <div>
-                <div class="slider" id="exp6"></div>
-                <div class="slider" id="exp7"></div>
-                <div class="slider" id="exp8"></div>
-                <div class="slider" id="exp9"></div>
-                <div class="slider" id="exp10"></div>
-                <div class="slider p1" id="pose4"></div>
-                <div class="slider" id="pose5"></div>
-                <div class="slider" id="pose6"></div>
-            </div>
-            <div>
-                <div class="slider" id="exp11"></div>
-                <div class="slider" id="exp12"></div>
-                <div class="slider" id="exp13"></div>
-                <div class="slider" id="exp14"></div>
-                <div class="slider" id="exp15"></div>
-                <div class="slider p1" id="pose7"></div>
-                <div class="slider" id="pose8"></div>
-                <div class="slider" id="pose9"></div>
-            </div>
-            <div>
-                <div class="slider" id="exp16"></div>
-                <div class="slider" id="exp17"></div>
-                <div class="slider" id="exp18"></div>
-                <div class="slider" id="exp19"></div>
-                <div class="slider" id="exp20"></div>
-                <div class="slider p1" id="pose10"></div>
-                <div class="slider" id="pose11"></div>
-                <div class="slider" id="pose12"></div>
-            </div>
-            <div>
-                <div class="slider" id="exp21"></div>
-                <div class="slider" id="exp22"></div>
-                <div class="slider" id="exp23"></div>
-                <div class="slider" id="exp24"></div>
-                <div class="slider" id="exp25"></div>
-                <div class="slider p1" id="pose13"></div>
-                <div class="slider" id="pose14"></div>
-                <div class="slider" id="pose15"></div>
-            </div>
-            <div>
-                <div class="slider" id="exp26"></div>
-                <div class="slider" id="exp27"></div>
-                <div class="slider" id="exp28"></div>
-                <div class="slider" id="exp29"></div>
-                <div class="slider" id="exp30"></div>
-            </div>
-            <div>
-                <div class="slider" id="exp31"></div>
-                <div class="slider" id="exp32"></div>
-                <div class="slider" id="exp33"></div>
-                <div class="slider" id="exp34"></div>
-                <div class="slider" id="exp35"></div>
-            </div>
-            <div>
-                <div class="slider" id="exp36"></div>
-                <div class="slider" id="exp37"></div>
-                <div class="slider" id="exp38"></div>
-                <div class="slider" id="exp39"></div>
-                <div class="slider" id="exp40"></div>
-            </div>
-            <div>
-                <div class="slider" id="exp41"></div>
-                <div class="slider" id="exp42"></div>
-                <div class="slider" id="exp43"></div>
-                <div class="slider" id="exp44"></div>
-                <div class="slider" id="exp45"></div>
-            </div>
-            <div>
-                <div class="slider" id="exp46"></div>
-                <div class="slider" id="exp47"></div>
-                <div class="slider" id="exp48"></div>
-                <div class="slider" id="exp49"></div>
-                <div class="slider" id="exp50"></div>
+                <div class="p1">
+                    <div class="onerow" id="exp1"></div>
+                    <div class="onerow" id="exp2"></div>
+                    <div class="onerow" id="exp3"></div>
+                    <div class="onerow" id="exp4"></div>
+                    <div class="onerow" id="exp5"></div>
+
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="exp6"></div>
+                    <div class="onerow" id="exp7"></div>
+                    <div class="onerow" id="exp8"></div>
+                    <div class="onerow" id="exp9"></div>
+                    <div class="onerow" id="exp10"></div>
+
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="exp11"></div>
+                    <div class="onerow" id="exp12"></div>
+                    <div class="onerow" id="exp13"></div>
+                    <div class="onerow" id="exp14"></div>
+                    <div class="onerow" id="exp15"></div>
+
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="exp16"></div>
+                    <div class="onerow" id="exp17"></div>
+                    <div class="onerow" id="exp18"></div>
+                    <div class="onerow" id="exp19"></div>
+                    <div class="onerow" id="exp20"></div>
+
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="exp21"></div>
+                    <div class="onerow" id="exp22"></div>
+                    <div class="onerow" id="exp23"></div>
+                    <div class="onerow" id="exp24"></div>
+                    <div class="onerow" id="exp25"></div>
+
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="exp26"></div>
+                    <div class="onerow" id="exp27"></div>
+                    <div class="onerow" id="exp28"></div>
+                    <div class="onerow" id="exp29"></div>
+                    <div class="onerow" id="exp30"></div>
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="exp31"></div>
+                    <div class="onerow" id="exp32"></div>
+                    <div class="onerow" id="exp33"></div>
+                    <div class="onerow" id="exp34"></div>
+                    <div class="onerow" id="exp35"></div>
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="exp36"></div>
+                    <div class="onerow" id="exp37"></div>
+                    <div class="onerow" id="exp38"></div>
+                    <div class="onerow" id="exp39"></div>
+                    <div class="onerow" id="exp40"></div>
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="exp41"></div>
+                    <div class="onerow" id="exp42"></div>
+                    <div class="onerow" id="exp43"></div>
+                    <div class="onerow" id="exp44"></div>
+                    <div class="onerow" id="exp45"></div>
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="exp46"></div>
+                    <div class="onerow" id="exp47"></div>
+                    <div class="onerow" id="exp48"></div>
+                    <div class="onerow" id="exp49"></div>
+                    <div class="onerow" id="exp50"></div>
+                </div>
+                <div class="p1" style="margin-top:10px">
+                    <div class="onerow" id="pose1"></div>
+                    <div class="onerow" id="pose2"></div>
+                    <div class="onerow" id="pose3"></div>
+                    <div class="onerow" id="pose4"></div>
+                    <div class="onerow" id="pose5"></div>
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="pose6"></div>
+                    <div class="onerow" id="pose7"></div>
+                    <div class="onerow" id="pose8"></div>
+                    <div class="onerow" id="pose9"></div>
+                    <div class="onerow" id="pose10"></div>
+                </div>
+                <div class="p1">
+                    <div class="onerow" id="pose11"></div>
+                    <div class="onerow" id="pose12"></div>
+                    <div class="onerow" id="pose13"></div>
+                    <div class="onerow" id="pose14"></div>
+                    <div class="onerow" id="pose15"></div>
+                </div>
             </div>
         </div>
-
     </div>
-    <p id="timeTest" style="white-space:pre-wrap;"></p>
+    <div class="row">
+        <div class="col s1">
+            <p id="timeTest" style="white-space:pre-wrap;display: inline-block;"></p>
+        </div>
+        <div class="col" style="width: 200px; display: none;" id="precise_occlusion">
+            <p class="center-align">
+                <input class="filled-in" name="group1" type="checkbox" id="checkpo" />
+                <label for="checkpo" class="black-text">precise_occlusion</label>
+            </p>
+        </div>
+        <div class="col" style="width: 120px;" id="M_num"></div>
+        <div class="col" style="width: 140px;" id="F_num"></div>
+        <div class="col row" style="width:470px">
+            <div class="col waves-effect waves-light btn white-text darkblue ani" id="sandbox">Sandbox</div>
+            <div class="col waves-effect waves-light btn white-text skyblue ani" id="ani1">Animation 1</div>
+            <div class="col waves-effect waves-light btn white-text skyblue ani" id="ani2">Animation 2</div>
+            <div class="col waves-effect waves-light btn white-text skyblue ani" id="ani3">Animation 3</div>
+            <div class="col waves-effect waves-light btn white-text skyblue ani" id="ani4">Animation 4</div>
+        </div>
+    </div>
+
     <script type="text/javascript" src="jsUtils/jquery-3.6.4.min.js"></script>
+    <script type="text/javascript" src="jsUtils/materialize.min.js"></script>
     <script type="text/javascript" src="jsUtils/webgl-lessons-ui.js"></script>
     <script type="text/javascript" src="jsUtils/webgl-utils.js"></script>
     <script type="text/javascript" src="dist/main.js"></script>

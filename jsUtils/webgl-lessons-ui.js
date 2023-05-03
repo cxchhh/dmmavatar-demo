@@ -73,9 +73,9 @@
     value /= step;
 
     parent.innerHTML = `
-      <div class="gman-widget-outer">
-        <div class="gman-widget-label">${name}</div>
-        <div class="gman-widget-value"></div>
+      <div class="gman-widget-outer" style="margin-top:10px">
+        <div class="gman-widget-label" style="display:inline-block">${name}</div>
+        <div class="gman-widget-value" style="display:inline-block"></div>
         <input class="gman-widget-slider" type="range" min="${min}" max="${max}" value="${value}" />
       </div>
     `;
